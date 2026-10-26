@@ -1,0 +1,10 @@
+[project]
+name = "benchmarks-ordered"
+version = "0.1.0"
+description = "The Python environment for the Ordered's benchmarks project"
+
+requires-python = ">=3.14,<4.0"
+dependencies = [
+    "pre-commit>=4.2.0",
+    "icecream>=2.1.4",
+]
