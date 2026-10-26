@@ -4,11 +4,16 @@
     .fingerprint = 0x997c42da85d041f3, // Changing this has security and trust implications.
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
+        .ordered = .{
+            .url = "git+https://github.com/CogitatorTech/ordered.git#864d82da5cc060e668cb4fb9c0de5450fcf47985",
+            .hash = "ordered-0.3.1-Gy41sESfAgBfT7YmlunnfbKOdhdfC0SvZDDylfmjIbp2",
+            .lazy = true,
+        },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "src",
+        "benchmarks/zig",
         "LICENSE",
         "README.md",
     },

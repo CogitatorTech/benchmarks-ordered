@@ -89,11 +89,17 @@ temp/
 *.wal
 *.duckdb
 
-# Dependency lock files (optional)
-poetry.lock
+results/
+benchmarks/java/target/
+.direnv/
+
+# Rust Build Artifacts
+/target/
+benchmarks/rust/target/
 
 # Additional files and directories to ignore (put below)
 docs/api/
 *_output.txt
 .codex
 .claude/
+zig-pkg/

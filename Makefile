@@ -1,104 +1,69 @@
 ################################################################################
 # Configuration and Variables
 ################################################################################
-ZIG_LOCAL  := $(HOME)/.local/share/zig/0.17.0/zig
-ZIG        ?= $(shell test -x $(ZIG_LOCAL) && echo $(ZIG_LOCAL) || which zig)
-ZIG_VERSION   := $(shell $(ZIG) version)
-BUILD_TYPE    ?= Debug
-BUILD_OPTS      = -Doptimize=$(BUILD_TYPE)
-JOBS          ?= $(shell nproc || echo 2)
-SRC_DIR       := src
-TEST_DIR      := tests
-BUILD_DIR     := zig-out
-CACHE_DIR     := .zig-cache
-DOC_SRC       := src/root.zig
-DOC_OUT       := docs/api/
-COVERAGE_DIR  := coverage
-BINARY_NAME   := template-zig-project
-BINARY_PATH   := $(BUILD_DIR)/bin/$(BINARY_NAME)
-TEST_EXECUTABLE := $(BUILD_DIR)/bin/test
-PREFIX        ?= /usr/local
-RELEASE_MODE := ReleaseSmall
+PYTHON         ?= python3
+ZIG            ?= zig
+CARGO          ?= cargo
+NIXFMT         ?= nixfmt
+UV             ?= uv
+ARGS           ?=
+BENCHMARKS_DIR := benchmarks
+HARNESS        := scripts/bench.py
 
-SHELL         := /usr/bin/env bash
-.SHELLFLAGS   := -eu -o pipefail -c
+export ZIG CARGO
+
+SHELL       := /usr/bin/env bash
+.SHELLFLAGS := -eu -o pipefail -c
 
 ################################################################################
 # Targets
 ################################################################################
 
-.PHONY: all build rebuild run test cov lint format docs clean install-deps release help coverage setup-hooks test-hooks
+.PHONY: all help build run test lint format smoke bench setup-hooks test-hooks
 .DEFAULT_GOAL := help
 
 help: ## Show the help messages for all targets
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' Makefile | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' Makefile | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
 
-all: build test lint docs  ## build, test, lint, and doc
+all: test lint ## Build runners, run correctness tests, and check formatting
 
-build: ## Build project (Mode=$(BUILD_TYPE))
-	@echo "Building project in $(BUILD_TYPE) mode with $(JOBS) concurrent jobs..."
-	$(ZIG) build $(BUILD_OPTS) -j$(JOBS)
+build: ## Build all benchmark runners in release mode
+	@echo "Building benchmark runners..."
+	$(PYTHON) $(HARNESS) build $(ARGS)
 
-rebuild: clean build  ## clean and build
+run: smoke ## Run the smoke benchmark
 
-run: build  ## Run the main application
-	@echo "Running $(BINARY_NAME)..."
-	$(ZIG) build run $(BUILD_OPTS) --
+test: ## Run harness tests and correctness checks for all implementations
+	@echo "Running benchmark correctness tests..."
+	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py'
+	$(PYTHON) $(HARNESS) test $(ARGS)
 
-test: ## Run tests and generate coverage data
-	@echo "Running tests with coverage enabled..."
-	$(ZIG) build test $(BUILD_OPTS) -Denable-coverage=true -j$(JOBS)
-
-release: ## Build in Release mode
-	@echo "Building the project in Release mode..."
-	@$(MAKE) BUILD_TYPE=$(RELEASE_MODE) build
-
-clean: ## Remove docs, build artifacts, and cache directories
-	@echo "Removing build artifacts, cache, generated docs, and coverage files..."
-	rm -rf $(BUILD_DIR) $(CACHE_DIR) $(DOC_OUT) *.profraw $(COVERAGE_DIR)
-
-lint: ## Check code style and formatting of Zig files
+lint: ## Check Zig, Rust, and Nix formatting and Python syntax
 	@echo "Running code style checks..."
-	$(ZIG) fmt --check $(SRC_DIR) $(TEST_DIR)
+	$(ZIG) fmt --check build.zig $(BENCHMARKS_DIR)/zig
+	$(CARGO) fmt --manifest-path $(BENCHMARKS_DIR)/rust/Cargo.toml --check
+	$(NIXFMT) --check flake.nix
+	$(PYTHON) -m compileall -q scripts
 
-format: ## Format Zig files
-	@echo "Formatting Zig files..."
-	$(ZIG) fmt .
+format: ## Format Zig, Rust, and Nix files
+	@echo "Formatting source files..."
+	$(ZIG) fmt build.zig $(BENCHMARKS_DIR)/zig
+	$(CARGO) fmt --manifest-path $(BENCHMARKS_DIR)/rust/Cargo.toml
+	$(NIXFMT) flake.nix
 
-docs: ## Generate API documentation
-	@echo "Generating documentation from $(DOC_SRC) to $(DOC_OUT)..."
-	mkdir -p $(DOC_OUT)
-	@if $(ZIG) doc --help > /dev/null 2>&1; then \
-	  $(ZIG) doc $(DOC_SRC) --output-dir $(DOC_OUT); \
-	else \
-	  $(ZIG) test -femit-docs $(DOC_SRC); \
-	  for f in docs/*; do \
-		base=$$(basename "$$f"); \
-		if [ "$$base" = "assets" ] || [ "$$base" = "api" ]; then \
-		  continue; \
-		fi; \
-		mv "$$f" $(DOC_OUT)/; \
-	  done; \
-	fi
+smoke: build ## Run a short benchmark to verify result collection
+	@echo "Running the smoke benchmark..."
+	$(PYTHON) $(HARNESS) bench --sizes 1000 --warmups 1 --samples 1 --forks 1 $(ARGS)
 
-install-deps: ## Install system dependencies (for Debian-based systems)
-	@echo "Installing system dependencies..."
-	sudo apt-get update
-	sudo apt-get install -y make llvm snapd
-	sudo snap install zig  --beta --classic # Use `--edge --classic` to install the latest version
+bench: build ## Run benchmarks with the default workloads or ARGS overrides
+	@echo "Running benchmarks..."
+	$(PYTHON) $(HARNESS) bench $(ARGS)
 
-coverage: ## Generate code coverage report
-	@echo "Building tests with coverage instrumentation..."
-	@zig build test -Denable-coverage=true
-	@echo "Generating coverage report..."
-	@kcov --include-pattern=src --verify coverage-out zig-out/bin/test-root
-
-setup-hooks: ## Install Git hooks (pre-commit and pre-push)
+setup-hooks: ## Install Git hooks using the locked Python environment
 	@echo "Installing Git hooks..."
-	@pre-commit install --hook-type pre-commit
-	@pre-commit install --hook-type pre-push
-	@pre-commit install-hooks
+	$(UV) run --locked pre-commit install --hook-type pre-commit
+	$(UV) run --locked pre-commit install --hook-type pre-push
 
 test-hooks: ## Run Git hooks on all files manually
 	@echo "Running Git hooks..."
-	@pre-commit run --all-files
+	$(UV) run --locked pre-commit run --all-files

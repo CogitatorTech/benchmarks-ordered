@@ -1,0 +1,9 @@
+[package]
+name = "ordered-benchmarks-rust"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "rust-bench"
+path = "src/main.rs"

@@ -2,41 +2,46 @@ name: Run Tests
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+  schedule: # Run every day at midnight (UTC)
+    - cron: '0 0 * * *'
   pull_request:
     branches:
       - main
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - '.github/**'
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - '**.md'
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
 
-      - name: Install Zig 0.16.0
-        run: |
-          curl -sSfL https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz | tar -xJ
-          echo "$PWD/zig-x86_64-linux-0.16.0" >> "$GITHUB_PATH"
+      - name: Build and check every implementation
+        run: nix develop --command make test
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make
+      - name: Check formatting
+        run: nix develop --command make lint
 
-      - name: Run tests
-        run: make test
+      - name: Collect the results
+        run: nix develop --command make smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: results/

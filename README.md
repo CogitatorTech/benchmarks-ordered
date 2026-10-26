@@ -1,50 +1,51 @@
-## Zig Project Template
+## Benchmarks for the Ordered Library
 
-<div align="center">
-  <picture>
-    <img alt="Zig Logo" src="docs/assets/logo/zero.svg" height="35%" width="35%">
-  </picture>
-</div>
-<br>
-
-[![Tests](https://img.shields.io/github/actions/workflow/status/habedi/template-zig-project/tests.yml?label=tests&style=flat&labelColor=282c34&logo=github)](https://github.com/habedi/template-zig-project/actions/workflows/tests.yml)
-[![Code Coverage](https://img.shields.io/codecov/c/github/habedi/template-zig-project?label=coverage&style=flat&labelColor=282c34&logo=codecov)](https://codecov.io/gh/habedi/template-zig-project)
-[![CodeFactor](https://img.shields.io/codefactor/grade/github/habedi/template-zig-project?label=code%20quality&style=flat&labelColor=282c34&logo=codefactor)](https://www.codefactor.io/repository/github/habedi/template-zig-project)
-[![Docs](https://img.shields.io/badge/docs-read-007ec6?label=docs&style=flat&labelColor=282c34&logo=readthedocs)](docs)
-[![Examples](https://img.shields.io/badge/examples-view-007ec6?label=examples&style=flat&labelColor=282c34&logo=zig)](examples)
-[![Zig Version](https://img.shields.io/badge/Zig-0.16.0-orange?logo=zig&labelColor=282c34)](https://ziglang.org/download/)
-[![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/habedi/template-zig-project/blob/main/LICENSE)
-[![Release](https://img.shields.io/github/release/habedi/template-zig-project.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/habedi/template-zig-project/releases/latest)
+[![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/benchmarks-ordered/tests.yml?label=tests&style=flat&labelColor=333333&logo=github&logoColor=white)](https://github.com/CogitatorTech/benchmarks-ordered/actions/workflows/tests.yml)
+[![License](https://img.shields.io/badge/license-MIT-3776ab?style=flat&labelColor=333333)](LICENSE)
 
 ---
 
-This is a template for Zig projects.
-It provides a minimalistic project structure with pre-configured GitHub Actions, Makefile, and a few useful
-configuration files.
-I share it here in case it might be useful to others.
+Benchmarks to compare sorted maps and sets implemented in the Ordered Zig library with similar implementations in Rust, C, C++, and Java.
 
-### Features
+### Implementations
 
-- Minimalistic project structure
-- Pre-configured GitHub Actions for linting and testing
-- Makefile for managing the development workflow and tasks like code formatting, testing, linting, etc.
-- GitHub badges for tests, code quality and coverage, documentation, etc.
-- [Code of Conduct](CODE_OF_CONDUCT.md) and [Contributing Guidelines](CONTRIBUTING.md)
+| Language | Sorted Maps                                                            | Sorted Sets                                            |
+|----------|------------------------------------------------------------------------|--------------------------------------------------------|
+| Zig      | Ordered `BTreeMap`, `CartesianTreeMap`, and `SkipListMap`; `std.Treap` | Ordered `SortedSet` and `RedBlackTreeSet`; `std.Treap` |
+| Rust     | `std::collections::BTreeMap`                                           | `std::collections::BTreeSet`                           |
+| C        | Klib `kbtree` with key-value entries                                   | Klib `kbtree` with keys                                |
+| C++      | `std::map` and Abseil `btree_map`                                      | `std::set` and Abseil `btree_set`                      |
+| Java     | `TreeMap<Long, Long>`                                                  | `TreeSet<Long>`                                        |
 
-### Getting Started
+---
 
-Check out the [Makefile](Makefile) for available commands to manage the development workflow of the project.
+### Quickstart
 
-```shell
-# Install system and development dependencies (for Debian-based systems)
-sudo apt-get install make
-make install-deps
+For the steps below to work, you need to have [Nix](https://nixos.org/download/) installed on your machine.
+
+#### 1. Set up the environment
+
+```bash
+nix develop
 ```
 
-```shell
-# See all available commands and their descriptions
-make help
+#### 2. Clone the repository
+
+```bash
+git clone https://github.com/CogitatorTech/benchmarks-ordered.git
+cd benchmarks-ordered
 ```
+
+#### 3. Build and run the benchmarks
+
+```bash
+make build
+make bench
+```
+
+The results of the benchmarks are stored in the `results` directory.
+
+---
 
 ### Contributing
 
@@ -52,4 +53,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to make a contribution
 
 ### License
 
-This project is licensed under the MIT License ([LICENSE](LICENSE) or https://opensource.org/licenses/MIT)
+This project is licensed under the MIT License (see [LICENSE](LICENSE)).

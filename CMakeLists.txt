@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(ordered_benchmarks LANGUAGES CXX)
+find_package(absl CONFIG REQUIRED)
+add_executable(cpp-bench benchmarks/cpp/main.cpp)
+target_include_directories(cpp-bench PRIVATE benchmarks/common)
+target_compile_features(cpp-bench PRIVATE cxx_std_17)
+target_compile_options(cpp-bench PRIVATE -Wall -Wextra)
+target_link_libraries(cpp-bench PRIVATE absl::btree)
