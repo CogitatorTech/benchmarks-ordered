@@ -21,19 +21,19 @@ Benchmarks to compare sorted maps and sets implemented in the Ordered Zig librar
 
 ### Quickstart
 
-For the steps below to work, you need to have [Nix](https://nixos.org/download/) installed on your machine.
+For the steps below to work, you need to have Git and [Nix](https://nixos.org/download/) (with flakes enabled) installed on your machine.
 
-#### 1. Set up the environment
-
-```bash
-nix develop
-```
-
-#### 2. Clone the repository
+#### 1. Clone the repository
 
 ```bash
 git clone https://github.com/CogitatorTech/benchmarks-ordered.git
 cd benchmarks-ordered
+```
+
+#### 2. Set up the environment
+
+```bash
+nix develop
 ```
 
 #### 3. Build and run the benchmarks
