@@ -172,6 +172,8 @@ This benchmark isolates five fundamental phases of sorted container operations:
 - **Iterate**: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (e.g. flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
 - **Remove**: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time.
 
+The lowest latency value for each operation column in the tables below is displayed in **bold**.
+
 ### Key Architectural Comparisons
 
 1. **B-Trees versus Binary Trees**:
@@ -183,6 +185,15 @@ This benchmark isolates five fundamental phases of sorted container operations:
 4. **Java Boxed Collections versus Primitive Specialization**:
    Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), demonstrating the true algorithmic capacity of the JVM without object wrappers.
 """
+
+
+def format_metric(val, best_val):
+    if val is None:
+        return "-"
+    formatted = f"{val:.2f}"
+    if best_val is not None and formatted == f"{best_val:.2f}":
+        return f"**{formatted}**"
+    return formatted
 
 
 def render_chart(title, x_labels, values, y_label="Time (ns/op)"):
@@ -248,6 +259,16 @@ def generate_report(records, metadata):
 
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
+            best_by_phase = {}
+            for phase in PHASES:
+                vals = [
+                    phases[phase]
+                    for phases in by_impl.values()
+                    if phase in phases and phases[phase] > 0
+                ]
+                if vals:
+                    best_by_phase[phase] = min(vals)
+
             chart_labels = []
             chart_hit_values = []
             chart_iter_values = []
@@ -266,11 +287,11 @@ def generate_report(records, metadata):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = f"{phases.get('insert', 0.0):.2f}"
-                hit_str = f"{phases.get('hit', 0.0):.2f}"
-                miss_str = f"{phases.get('miss', 0.0):.2f}"
-                iter_str = f"{phases.get('iterate', 0.0):.2f}"
-                remove_str = f"{phases.get('remove', 0.0):.2f}"
+                insert_str = format_metric(phases.get("insert"), best_by_phase.get("insert"))
+                hit_str = format_metric(phases.get("hit"), best_by_phase.get("hit"))
+                miss_str = format_metric(phases.get("miss"), best_by_phase.get("miss"))
+                iter_str = format_metric(phases.get("iterate"), best_by_phase.get("iterate"))
+                remove_str = format_metric(phases.get("remove"), best_by_phase.get("remove"))
 
                 table_rows.append(
                     f"| {lang} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"

@@ -100,6 +100,11 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(records[0]["min_ns_per_op"], 25.0)
             self.assertEqual(records[0]["max_ns_per_op"], 35.0)
 
+    def test_format_metric(self):
+        self.assertEqual(report.format_metric(10.5, 10.5), "**10.50**")
+        self.assertEqual(report.format_metric(15.2, 10.5), "15.20")
+        self.assertEqual(report.format_metric(None, 10.5), "-")
+
     def test_render_chart(self):
         chart = report.render_chart("Test Chart", ["A", "B"], [10.5, 20.2])
         self.assertIn("xychart-beta", chart)
@@ -132,6 +137,30 @@ class ReportTests(unittest.TestCase):
                 "max_ns_per_op": 31.0,
                 "samples": 1,
             },
+            {
+                "language": "rust",
+                "implementation": "btree_map",
+                "kind": "map",
+                "size": 1000,
+                "order": "ascending",
+                "phase": "insert",
+                "median_ns_per_op": 35.0,
+                "min_ns_per_op": 34.0,
+                "max_ns_per_op": 36.0,
+                "samples": 1,
+            },
+            {
+                "language": "rust",
+                "implementation": "btree_map",
+                "kind": "map",
+                "size": 1000,
+                "order": "ascending",
+                "phase": "hit",
+                "median_ns_per_op": 15.0,
+                "min_ns_per_op": 14.0,
+                "max_ns_per_op": 16.0,
+                "samples": 1,
+            },
         ]
         meta = {
             "cpu": "Test CPU",
@@ -142,7 +171,12 @@ class ReportTests(unittest.TestCase):
         self.assertIn("# Benchmark Report: Sorted Maps and Sets", output)
         self.assertIn("Test CPU", output)
         self.assertIn("Ordered BTreeMap", output)
-        self.assertIn("20.00", output)
+        # Best insert (20.00) is bold, worse insert (35.00) is not bold
+        self.assertIn("**20.00**", output)
+        self.assertIn("| 35.00 |", output)
+        # Best hit (15.00) is bold, worse hit (30.00) is not bold
+        self.assertIn("**15.00**", output)
+        self.assertIn("| 30.00 |", output)
 
 
 if __name__ == "__main__":
