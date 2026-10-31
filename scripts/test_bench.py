@@ -55,6 +55,15 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 list(bench.jmh_samples(bad, 2, 2))
 
+    def test_implementation_names(self):
+        for language, impls in bench.IMPLS.items():
+            self.assertTrue(len(impls) > 0)
+            for impl in impls:
+                self.assertTrue(
+                    impl.endswith("_map") or impl.endswith("_set"),
+                    f"{impl} must end with _map or _set",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
