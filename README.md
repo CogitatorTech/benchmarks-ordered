@@ -45,6 +45,12 @@ make bench
 
 The results of the benchmarks are stored in the `results` directory.
 
+#### 4. Generate reports (optional)
+
+```bash
+make report
+```
+
 ---
 
 ### Contributing
