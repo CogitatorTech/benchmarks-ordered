@@ -15,6 +15,10 @@
       url = "github:attractivechaos/klib";
       flake = false;
     };
+    btree-c = {
+      url = "github:tidwall/btree.c";
+      flake = false;
+    };
   };
 
   outputs =
@@ -24,6 +28,7 @@
       rust-overlay,
       ordered,
       klib,
+      btree-c,
       ...
     }:
     let
@@ -58,11 +63,14 @@
               cmake
               ninja
               abseil-cpp
+              boost
               nixfmt
             ];
             ORDERED_SOURCE = "${ordered}";
             KLIB_SOURCE = "${klib}";
+            BTREE_C_SOURCE = "${btree-c}";
             ABSEIL_PREFIX = "${pkgs.abseil-cpp.dev}";
+            BOOST_PREFIX = "${pkgs.boost.dev}";
           };
         }
       );

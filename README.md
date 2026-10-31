@@ -9,13 +9,13 @@ Benchmarks to compare sorted maps and sets implemented in the Ordered Zig librar
 
 ### Implementations
 
-| Language | Sorted Maps                                                            | Sorted Sets                                            |
-|----------|------------------------------------------------------------------------|--------------------------------------------------------|
-| Zig      | Ordered `BTreeMap`, `CartesianTreeMap`, and `SkipListMap`; `std.Treap` | Ordered `SortedSet` and `RedBlackTreeSet`; `std.Treap` |
-| Rust     | `std::collections::BTreeMap`                                           | `std::collections::BTreeSet`                           |
-| C        | Klib `kbtree` with key-value entries                                   | Klib `kbtree` with keys                                |
-| C++      | `std::map` and Abseil `btree_map`                                      | `std::set` and Abseil `btree_set`                      |
-| Java     | `TreeMap<Long, Long>`                                                  | `TreeSet<Long>`                                        |
+| Language | Sorted Maps                                                                                  | Sorted Sets                                                                         |
+|----------|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| Zig      | Ordered `BTreeMap`, `CartesianTreeMap`, and `SkipListMap`; `std.Treap`                       | Ordered `SortedSet` and `RedBlackTreeSet`; `std.Treap`                              |
+| Rust     | `std::collections::BTreeMap` and `indexset::BTreeMap`                                        | `std::collections::BTreeSet` and `indexset::BTreeSet`                               |
+| C        | Klib `kbtree` with key-value entries, Klib `kavl` AVL tree, and `tidwall/btree.c`             | Klib `kbtree` with keys, Klib `kavl` AVL tree, and `tidwall/btree.c`                |
+| C++      | `std::map`, Abseil `btree_map`, and Boost `flat_map`                                         | `std::set`, Abseil `btree_set`, and Boost `flat_set`                                |
+| Java     | `TreeMap<Long, Long>`, fastutil `Long2LongAVLTreeMap`, and fastutil `Long2LongRBTreeMap`     | `TreeSet<Long>`, fastutil `LongAVLTreeSet`, and fastutil `LongRBTreeSet`            |
 
 ---
 
