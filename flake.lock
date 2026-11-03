@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "btree-c": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789987717,
+        "narHash": "sha256-vREkF/0auqNqyPIfzstb5jxwg2X3nl6C2yzZ72W1fBE=",
+        "owner": "tidwall",
+        "repo": "btree.c",
+        "rev": "48634e841e32c7c1e91d5319002bab4f5f8842f0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tidwall",
+        "repo": "btree.c",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -67,6 +83,7 @@
     },
     "root": {
       "inputs": {
+        "btree-c": "btree-c",
         "klib": "klib",
         "nixpkgs": "nixpkgs",
         "ordered": "ordered",

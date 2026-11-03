@@ -7,3 +7,6 @@ publish = false
 [[bin]]
 name = "rust-bench"
 path = "src/main.rs"
+
+[dependencies]
+indexset = "0.16.0"

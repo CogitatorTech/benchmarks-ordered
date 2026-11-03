@@ -103,3 +103,4 @@ docs/api/
 .codex
 .claude/
 zig-pkg/
+REPORT.md

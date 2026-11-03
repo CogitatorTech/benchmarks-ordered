@@ -58,6 +58,52 @@ impl Collection for BTreeSet<i64> {
         }
     }
 }
+impl Collection for indexset::BTreeMap<i64, i64> {
+    const IS_SET: bool = false;
+    fn put(&mut self, k: i64, v: i64) {
+        self.insert(k, v);
+    }
+    fn get(&self, k: i64) -> Option<i64> {
+        indexset::BTreeMap::get(self, &k).copied()
+    }
+    fn remove(&mut self, k: i64) -> bool {
+        indexset::BTreeMap::remove(self, &k).is_some()
+    }
+    fn len(&self) -> usize {
+        indexset::BTreeMap::len(self)
+    }
+    fn sum(&self) -> i64 {
+        self.values().sum()
+    }
+    fn validate(&self) {
+        for (i, (&k, &v)) in self.iter().enumerate() {
+            assert_eq!((k, v), (i as i64 * 2, i as i64 * 2 + 1));
+        }
+    }
+}
+impl Collection for indexset::BTreeSet<i64> {
+    const IS_SET: bool = true;
+    fn put(&mut self, k: i64, _: i64) {
+        self.insert(k);
+    }
+    fn get(&self, k: i64) -> Option<i64> {
+        if self.contains(&k) { Some(k) } else { None }
+    }
+    fn remove(&mut self, k: i64) -> bool {
+        indexset::BTreeSet::remove(self, &k)
+    }
+    fn len(&self) -> usize {
+        indexset::BTreeSet::len(self)
+    }
+    fn sum(&self) -> i64 {
+        self.iter().sum()
+    }
+    fn validate(&self) {
+        for (i, &k) in self.iter().enumerate() {
+            assert_eq!(k, i as i64 * 2);
+        }
+    }
+}
 
 fn fresh<C: Collection>(keys: &[i64], n: usize) -> C {
     let mut c = C::default();
@@ -156,6 +202,8 @@ fn main() {
         match args[1].as_str() {
             "btree_map" => measure::<BTreeMap<i64, i64>>(&keys, n, i >= warmups),
             "btree_set" => measure::<BTreeSet<i64>>(&keys, n, i >= warmups),
+            "indexset_map" => measure::<indexset::BTreeMap<i64, i64>>(&keys, n, i >= warmups),
+            "indexset_set" => measure::<indexset::BTreeSet<i64>>(&keys, n, i >= warmups),
             _ => panic!("unknown implementation"),
         }
     }

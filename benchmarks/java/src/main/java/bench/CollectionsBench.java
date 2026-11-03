@@ -1,5 +1,11 @@
 package bench;
 
+import it.unimi.dsi.fastutil.longs.Long2LongAVLTreeMap;
+import it.unimi.dsi.fastutil.longs.Long2LongRBTreeMap;
+import it.unimi.dsi.fastutil.longs.Long2LongSortedMap;
+import it.unimi.dsi.fastutil.longs.LongAVLTreeSet;
+import it.unimi.dsi.fastutil.longs.LongRBTreeSet;
+import it.unimi.dsi.fastutil.longs.LongSortedSet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -19,15 +25,19 @@ import org.openjdk.jmh.infra.BenchmarkParams;
 @Fork(value = 2, jvmArgs = {"-Xms1g", "-Xmx1g"})
 @Threads(1)
 public class CollectionsBench {
-    @Param({"tree_map", "tree_set"})
+    @Param({"tree_map", "tree_set", "fastutil_avl_map", "fastutil_avl_set", "fastutil_rb_map", "fastutil_rb_set"})
     public String implementation;
     @Param({"fixture.bin"})
     public String fixture;
     private boolean isSet;
+    private boolean isFastutil;
     private int size;
     private Long[] insertion, values, lookup, absent, removal;
+    private long[] rawInsertion, rawValues, rawLookup, rawAbsent, rawRemoval;
     private TreeMap<Long, Long> map;
     private TreeSet<Long> set;
+    private Long2LongSortedMap fastMap;
+    private LongSortedSet fastSet;
     private String phase;
     private long result;
 
@@ -37,8 +47,8 @@ public class CollectionsBench {
 
     @Setup(Level.Trial)
     public void load() throws IOException {
-        check(implementation.equals("tree_set") || implementation.equals("tree_map"));
-        isSet = implementation.equals("tree_set");
+        isSet = implementation.endsWith("set");
+        isFastutil = implementation.startsWith("fastutil");
         byte[] bytes = Files.readAllBytes(Path.of(fixture));
         check(bytes.length >= 8);
         ByteBuffer data = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
@@ -50,29 +60,59 @@ public class CollectionsBench {
         lookup = new Long[size];
         absent = new Long[size];
         removal = new Long[size];
+        rawInsertion = new long[size];
+        rawValues = new long[size];
+        rawLookup = new long[size];
+        rawAbsent = new long[size];
+        rawRemoval = new long[size];
         for (int i = 0; i < size; i++) {
-            insertion[i] = readKey(data);
-            values[i] = insertion[i] + 1;
+            long k = readKey(data);
+            rawInsertion[i] = k;
+            rawValues[i] = k + 1;
+            insertion[i] = k;
+            values[i] = rawValues[i];
         }
         for (int i = 0; i < size; i++) {
-            lookup[i] = readKey(data);
-            absent[i] = lookup[i] + 1;
+            long k = readKey(data);
+            rawLookup[i] = k;
+            rawAbsent[i] = k + 1;
+            lookup[i] = k;
+            absent[i] = rawAbsent[i];
         }
-        for (int i = 0; i < size; i++) removal[i] = readKey(data);
+        for (int i = 0; i < size; i++) {
+            long k = readKey(data);
+            rawRemoval[i] = k;
+            removal[i] = k;
+        }
         fresh();
         populate();
         validate();
         if (size > 0) {
-            if (isSet) {
-                set.add(0L);
-                check(set.size() == size);
+            if (isFastutil) {
+                if (isSet) {
+                    fastSet.add(0L);
+                    check(fastSet.size() == size);
+                } else {
+                    fastMap.put(0L, -1L);
+                    check(fastMap.size() == size && fastMap.get(0L) == -1L);
+                    fastMap.put(0L, 1L);
+                }
             } else {
-                map.put(0L, -1L);
-                check(map.size() == size && map.get(0L) == -1L);
-                map.put(0L, 1L);
+                if (isSet) {
+                    set.add(0L);
+                    check(set.size() == size);
+                } else {
+                    map.put(0L, -1L);
+                    check(map.size() == size && map.get(0L) == -1L);
+                    map.put(0L, 1L);
+                }
             }
         }
-        check(isSet ? !set.remove(-1L) : map.remove(-1L) == null);
+        if (isFastutil) {
+            check(isSet ? !fastSet.remove(-1L) : fastMap.remove(-1L) == fastMap.defaultReturnValue());
+        } else {
+            check(isSet ? !set.remove(-1L) : map.remove(-1L) == null);
+        }
     }
 
     private long readKey(ByteBuffer data) {
@@ -82,27 +122,63 @@ public class CollectionsBench {
     }
 
     private void fresh() {
-        if (isSet) set = new TreeSet<>();
-        else map = new TreeMap<>();
+        switch (implementation) {
+            case "tree_set" -> set = new TreeSet<>();
+            case "tree_map" -> map = new TreeMap<>();
+            case "fastutil_avl_set" -> fastSet = new LongAVLTreeSet();
+            case "fastutil_avl_map" -> {
+                fastMap = new Long2LongAVLTreeMap();
+                fastMap.defaultReturnValue(Long.MIN_VALUE);
+            }
+            case "fastutil_rb_set" -> fastSet = new LongRBTreeSet();
+            case "fastutil_rb_map" -> {
+                fastMap = new Long2LongRBTreeMap();
+                fastMap.defaultReturnValue(Long.MIN_VALUE);
+            }
+            default -> throw new IllegalArgumentException("Unknown implementation: " + implementation);
+        }
     }
 
     private void populate() {
-        if (isSet) {
-            for (Long key : insertion) set.add(key);
+        if (isFastutil) {
+            if (isSet) {
+                for (long key : rawInsertion) fastSet.add(key);
+            } else {
+                for (int i = 0; i < size; i++) fastMap.put(rawInsertion[i], rawValues[i]);
+            }
         } else {
-            for (int i = 0; i < size; i++) map.put(insertion[i], values[i]);
+            if (isSet) {
+                for (Long key : insertion) set.add(key);
+            } else {
+                for (int i = 0; i < size; i++) map.put(insertion[i], values[i]);
+            }
         }
     }
 
     private void validate() {
-        check(isSet ? set.size() == size : map.size() == size);
+        int currentSize = isFastutil ? (isSet ? fastSet.size() : fastMap.size()) : (isSet ? set.size() : map.size());
+        check(currentSize == size);
         long index = 0;
-        if (isSet) {
-            for (Long key : set) check(key == index++ * 2);
+        if (isFastutil) {
+            if (isSet) {
+                for (var it = fastSet.iterator(); it.hasNext(); ) {
+                    check(it.nextLong() == index++ * 2);
+                }
+            } else {
+                for (var it = fastMap.long2LongEntrySet().iterator(); it.hasNext(); ) {
+                    var entry = it.next();
+                    check(entry.getLongKey() == index++ * 2);
+                    check(entry.getLongValue() == entry.getLongKey() + 1);
+                }
+            }
         } else {
-            for (var entry : map.entrySet()) {
-                check(entry.getKey() == index++ * 2);
-                check(entry.getValue() == entry.getKey() + 1);
+            if (isSet) {
+                for (Long key : set) check(key == index++ * 2);
+            } else {
+                for (var entry : map.entrySet()) {
+                    check(entry.getKey() == index++ * 2);
+                    check(entry.getValue() == entry.getKey() + 1);
+                }
             }
         }
         check(index == size);
@@ -127,18 +203,29 @@ public class CollectionsBench {
     @Benchmark
     public long insert() {
         populate();
-        return result = isSet ? set.size() : map.size();
+        return result = isFastutil ? (isSet ? fastSet.size() : fastMap.size()) : (isSet ? set.size() : map.size());
     }
 
     @Benchmark
     public long hit() {
         long sum = 0;
-        if (isSet) {
-            for (Long key : lookup) if (set.contains(key)) sum += key + 1;
+        if (isFastutil) {
+            if (isSet) {
+                for (long key : rawLookup) if (fastSet.contains(key)) sum += key + 1;
+            } else {
+                for (long key : rawLookup) {
+                    long value = fastMap.get(key);
+                    if (value != fastMap.defaultReturnValue()) sum += value;
+                }
+            }
         } else {
-            for (Long key : lookup) {
-                Long value = map.get(key);
-                if (value != null) sum += value;
+            if (isSet) {
+                for (Long key : lookup) if (set.contains(key)) sum += key + 1;
+            } else {
+                for (Long key : lookup) {
+                    Long value = map.get(key);
+                    if (value != null) sum += value;
+                }
             }
         }
         return result = sum;
@@ -147,10 +234,18 @@ public class CollectionsBench {
     @Benchmark
     public long miss() {
         long hits = 0;
-        if (isSet) {
-            for (Long key : absent) if (set.contains(key)) hits++;
+        if (isFastutil) {
+            if (isSet) {
+                for (long key : rawAbsent) if (fastSet.contains(key)) hits++;
+            } else {
+                for (long key : rawAbsent) if (fastMap.containsKey(key)) hits++;
+            }
         } else {
-            for (Long key : absent) if (map.get(key) != null) hits++;
+            if (isSet) {
+                for (Long key : absent) if (set.contains(key)) hits++;
+            } else {
+                for (Long key : absent) if (map.get(key) != null) hits++;
+            }
         }
         return result = hits;
     }
@@ -158,10 +253,18 @@ public class CollectionsBench {
     @Benchmark
     public long iterate() {
         long sum = 0;
-        if (isSet) {
-            for (Long key : set) sum += key;
+        if (isFastutil) {
+            if (isSet) {
+                for (var it = fastSet.iterator(); it.hasNext(); ) sum += it.nextLong();
+            } else {
+                for (var it = fastMap.values().iterator(); it.hasNext(); ) sum += it.nextLong();
+            }
         } else {
-            for (var entry : map.entrySet()) sum += entry.getValue();
+            if (isSet) {
+                for (Long key : set) sum += key;
+            } else {
+                for (var entry : map.entrySet()) sum += entry.getValue();
+            }
         }
         return result = sum;
     }
@@ -169,10 +272,18 @@ public class CollectionsBench {
     @Benchmark
     public long remove() {
         long removed = 0;
-        if (isSet) {
-            for (Long key : removal) if (set.remove(key)) removed++;
+        if (isFastutil) {
+            if (isSet) {
+                for (long key : rawRemoval) if (fastSet.remove(key)) removed++;
+            } else {
+                for (long key : rawRemoval) if (fastMap.remove(key) != fastMap.defaultReturnValue()) removed++;
+            }
         } else {
-            for (Long key : removal) if (map.remove(key) != null) removed++;
+            if (isSet) {
+                for (Long key : removal) if (set.remove(key)) removed++;
+            } else {
+                for (Long key : removal) if (map.remove(key) != null) removed++;
+            }
         }
         return result = removed;
     }
@@ -183,7 +294,7 @@ public class CollectionsBench {
             case "insert" -> { check(result == size); validate(); }
             case "remove" -> {
                 check(result == size);
-                check(isSet ? set.isEmpty() : map.isEmpty());
+                check(isFastutil ? (isSet ? fastSet.isEmpty() : fastMap.isEmpty()) : (isSet ? set.isEmpty() : map.isEmpty()));
             }
             case "miss" -> check(result == 0);
             case "hit" -> check(result == (long) size * size);
@@ -193,7 +304,8 @@ public class CollectionsBench {
     }
 
     public static void main(String[] args) throws Exception {
-        for (String impl : new String[]{"tree_map", "tree_set"}) {
+        String[] implementations = {"tree_map", "tree_set", "fastutil_avl_map", "fastutil_avl_set", "fastutil_rb_map", "fastutil_rb_set"};
+        for (String impl : implementations) {
             CollectionsBench bench = new CollectionsBench();
             bench.implementation = impl;
             bench.fixture = args[0];

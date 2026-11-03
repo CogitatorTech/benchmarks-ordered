@@ -3,6 +3,8 @@
 #include <set>
 #include <absl/container/btree_map.h>
 #include <absl/container/btree_set.h>
+#include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 
 template<class Collection, bool IsSet>
 static void measure(const Dataset &data, bool emit) {
@@ -95,6 +97,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "std_set")) measure<std::set<int64_t>, true>(data, emit);
         else if (!strcmp(argv[1], "absl_map")) measure<absl::btree_map<int64_t, int64_t>, false>(data, emit);
         else if (!strcmp(argv[1], "absl_set")) measure<absl::btree_set<int64_t>, true>(data, emit);
+        else if (!strcmp(argv[1], "boost_flat_map")) measure<boost::container::flat_map<int64_t, int64_t>, false>(data, emit);
+        else if (!strcmp(argv[1], "boost_flat_set")) measure<boost::container::flat_set<int64_t>, true>(data, emit);
         else CHECK(0);
     }
     free(data.insert);

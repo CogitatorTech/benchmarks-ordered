@@ -20,10 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build"
 IMPLS = {
     "zig": ["btree_map", "cartesian_map", "skiplist_map", "sorted_set", "redblack_set", "treap_map", "treap_set"],
-    "rust": ["btree_map", "btree_set"],
-    "c": ["kbtree_map", "kbtree_set"],
-    "cpp": ["std_map", "std_set", "absl_map", "absl_set"],
-    "java": ["tree_map", "tree_set"],
+    "rust": ["btree_map", "btree_set", "indexset_map", "indexset_set"],
+    "c": ["kbtree_map", "kbtree_set", "kavl_map", "kavl_set", "btree_map", "btree_set"],
+    "cpp": ["std_map", "std_set", "absl_map", "absl_set", "boost_flat_map", "boost_flat_set"],
+    "java": ["tree_map", "tree_set", "fastutil_avl_map", "fastutil_avl_set", "fastutil_rb_map", "fastutil_rb_set"],
 }
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
 
@@ -48,7 +48,7 @@ def fixture(path, size, order):
 
 
 def require_env():
-    for var in ("ORDERED_SOURCE", "KLIB_SOURCE", "ABSEIL_PREFIX"):
+    for var in ("ORDERED_SOURCE", "KLIB_SOURCE", "BTREE_C_SOURCE", "ABSEIL_PREFIX", "BOOST_PREFIX"):
         if var not in os.environ:
             raise RuntimeError("Enter nix develop before building or running benchmarks")
 
@@ -63,9 +63,10 @@ def build(languages):
     if "c" in languages:
         for kind in ("map", "set"):
             flags = ["-DBENCH_SET"] if kind == "set" else []
-            run(["cc", "-O3", "-std=c11", "-Wall", "-Wextra", "-I", ROOT / "benchmarks/common", *flags, "-I" + os.environ["KLIB_SOURCE"], ROOT / "benchmarks/c/main.c", "-o", BUILD / ("c-" + kind)])
+            run(["cc", "-O3", "-std=c11", "-Wall", "-Wextra", "-I", ROOT / "benchmarks/common", *flags, "-I" + os.environ["KLIB_SOURCE"], "-I" + os.environ["BTREE_C_SOURCE"], Path(os.environ["BTREE_C_SOURCE"]) / "btree.c", ROOT / "benchmarks/c/main.c", "-o", BUILD / ("c-" + kind)])
     if "cpp" in languages:
-        run(["cmake", "-S", ROOT, "-B", BUILD / "cpp-build", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_PREFIX_PATH=" + os.environ["ABSEIL_PREFIX"]])
+        prefix_path = os.environ["ABSEIL_PREFIX"] + ";" + os.environ["BOOST_PREFIX"]
+        run(["cmake", "-S", ROOT, "-B", BUILD / "cpp-build", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_PREFIX_PATH=" + prefix_path])
         run(["cmake", "--build", BUILD / "cpp-build"])
     if "java" in languages:
         run(["mvn", "-q", "-f", ROOT / "benchmarks/java/pom.xml", "clean", "package"], cwd=ROOT)
@@ -133,7 +134,9 @@ def metadata(languages):
             "platform": platform.platform(), "cpu": cpu, "python": sys.version, "versions": versions,
             "revision": revision, "dirty": bool(status), "git_status": status,
             "ordered_source": os.environ.get("ORDERED_SOURCE"), "klib_source": os.environ.get("KLIB_SOURCE"),
-            "abseil_prefix": os.environ.get("ABSEIL_PREFIX"), "flake_lock": json.loads((ROOT / "flake.lock").read_text()),
+            "btree_c_source": os.environ.get("BTREE_C_SOURCE"),
+            "abseil_prefix": os.environ.get("ABSEIL_PREFIX"), "boost_prefix": os.environ.get("BOOST_PREFIX"),
+            "flake_lock": json.loads((ROOT / "flake.lock").read_text()),
             "argv": sys.argv, "native_allocator": "system malloc; Zig libc_allocator", "native_flags": "ReleaseFast / Cargo release / -O3 / CMake Release", "java_heap": "-Xms1g -Xmx1g"}
 
 
