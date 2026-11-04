@@ -198,9 +198,17 @@ pub fn main(init: std.process.Init) !void {
     try check(n <= 10_000_000 and bytes.len == 8 + n * 24);
     const keys = try allocator.alloc(i64, n * 3);
     defer allocator.free(keys);
-    for (keys, 0..) |*key, i| {
-        key.* = std.mem.readInt(i64, bytes[8 + i * 8 ..][0..8], .little);
-        try check(key.* >= 0 and key.* < @as(i64, @intCast(n * 2)) and @mod(key.*, 2) == 0);
+    const seen = try allocator.alloc(bool, n);
+    defer allocator.free(seen);
+    for (0..3) |phase| {
+        @memset(seen, false);
+        for (keys[phase * n .. (phase + 1) * n], 0..) |*key, i| {
+            key.* = std.mem.readInt(i64, bytes[8 + (phase * n + i) * 8 ..][0..8], .little);
+            try check(key.* >= 0 and key.* < @as(i64, @intCast(n * 2)) and @mod(key.*, 2) == 0);
+            const index: usize = @intCast(@divExact(key.*, 2));
+            try check(!seen[index]);
+            seen[index] = true;
+        }
     }
     inline for (.{ BTree, Cartesian, SkipList, Sorted, RedBlack, Treap(false), Treap(true) }, .{ "btree_map", "cartesian_map", "skiplist_map", "sorted_set", "redblack_set", "treap_map", "treap_set" }) |T, label| {
         if (std.mem.eql(u8, name, label)) {

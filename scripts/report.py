@@ -5,10 +5,10 @@ import csv
 import html
 import json
 import math
-from pathlib import Path
 import shutil
 import statistics
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,10 +38,14 @@ STRUCTURE_MAP = {
     ("cpp", "boost_flat_set"): ("Boost flat_set", "Flat Sorted Vector", "C++ Boost flat"),
     ("java", "tree_map"): ("java.util.TreeMap", "Red-Black Tree (boxed Long)", "Java TreeMap"),
     ("java", "tree_set"): ("java.util.TreeSet", "Red-Black Tree (boxed Long)", "Java TreeSet"),
-    ("java", "fastutil_avl_map"): ("fastutil AVLTreeMap", "AVL Tree (primitive long)", "Java fastutil AVL"),
-    ("java", "fastutil_avl_set"): ("fastutil AVLTreeSet", "AVL Tree (primitive long)", "Java fastutil AVL"),
-    ("java", "fastutil_rb_map"): ("fastutil RBTreeMap", "Red-Black Tree (primitive long)", "Java fastutil RB"),
-    ("java", "fastutil_rb_set"): ("fastutil RBTreeSet", "Red-Black Tree (primitive long)", "Java fastutil RB"),
+    ("java", "fastutil_avl_map"): ("fastutil AVLTreeMap", "AVL Tree (primitive long)",
+                                   "Java fastutil AVL"),
+    ("java", "fastutil_avl_set"): ("fastutil AVLTreeSet", "AVL Tree (primitive long)",
+                                   "Java fastutil AVL"),
+    ("java", "fastutil_rb_map"): ("fastutil RBTreeMap", "Red-Black Tree (primitive long)",
+                                  "Java fastutil RB"),
+    ("java", "fastutil_rb_set"): ("fastutil RBTreeSet", "Red-Black Tree (primitive long)",
+                                  "Java fastutil RB"),
 }
 
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
@@ -56,95 +60,167 @@ def find_latest_results(base_dir=None):
         d
         for d in results_dir.iterdir()
         if d.is_dir()
-        and (d / "summary.csv").is_file()
+           and (d / "summary.csv").is_file()
     ]
     if not candidates:
         raise FileNotFoundError(f"No completed benchmark results found in {results_dir}")
     return max(candidates, key=lambda d: d.name)
 
 
+KEY_FIELDS = ("language", "implementation", "kind", "size", "order", "seed", "phase")
+
+
+def record_key(record):
+    return tuple(
+        record.get(field, 42) if field == "seed" else record[field] for field in KEY_FIELDS)
+
+
 def load_records(result_dir):
+    records = []
     summary_path = result_dir / "summary.csv"
     if summary_path.exists():
-        with summary_path.open("r", newline="") as f:
-            reader = csv.DictReader(f)
-            records = []
-            for r in reader:
-                records.append({
-                    "language": r["language"],
-                    "implementation": r["implementation"],
-                    "kind": r["kind"],
-                    "size": int(r["size"]),
-                    "order": r["order"],
-                    "phase": r["phase"],
-                    "median_ns_per_op": float(r["median_ns_per_op"]),
-                    "min_ns_per_op": float(r["min_ns_per_op"]),
-                    "max_ns_per_op": float(r["max_ns_per_op"]),
-                    "samples": int(r["samples"]),
-                })
-            validate_records(records)
-            return records
-
-    samples_path = result_dir / "samples.csv"
-    if not samples_path.exists():
-        raise FileNotFoundError(f"Neither summary.csv nor samples.csv found in {result_dir}")
+        with summary_path.open(newline="") as source:
+            for row in csv.DictReader(source):
+                for field in ("size", "samples"):
+                    row[field] = int(row[field])
+                row["seed"] = int(row.get("seed", 42))
+                for field in ("median_ns_per_op", "min_ns_per_op", "max_ns_per_op"):
+                    row[field] = float(row[field])
+                row["summary_only"] = True
+                records.append(row)
+        validate_records(records)
 
     groups = {}
-    with samples_path.open("r", newline="") as f:
-        reader = csv.DictReader(f)
-        for r in reader:
-            key = (
-                r["language"],
-                r["implementation"],
-                r["kind"],
-                int(r["size"]),
-                r["order"],
-                r["phase"],
-            )
-            groups.setdefault(key, []).append(float(r["ns_per_op"]))
-
-    records = []
-    for key, values in groups.items():
-        records.append({
-            "language": key[0],
-            "implementation": key[1],
-            "kind": key[2],
-            "size": key[3],
-            "order": key[4],
-            "phase": key[5],
-            "median_ns_per_op": statistics.median(values),
-            "min_ns_per_op": min(values),
-            "max_ns_per_op": max(values),
-            "samples": len(values),
-        })
-    validate_records(records)
+    samples_path = result_dir / "samples.csv"
+    if samples_path.exists():
+        with samples_path.open(newline="") as source:
+            reader = csv.DictReader(source)
+            if not set((*KEY_FIELDS[:-2], "phase", "fork", "sample", "ns_per_op")).issubset(
+                reader.fieldnames or []):
+                raise ValueError("Invalid samples header")
+            for row in reader:
+                row["size"] = int(row["size"])
+                row["seed"] = int(row.get("seed", 42))
+                value = float(row["ns_per_op"])
+                fork, sample = int(row["fork"]), int(row["sample"])
+                if not math.isfinite(value) or value < 0 or fork < 0 or sample < 0:
+                    raise ValueError("Invalid raw sample")
+                group = groups.setdefault(record_key(row), {})
+                if (fork, sample) in group:
+                    raise ValueError("Duplicate raw sample")
+                group[fork, sample] = value
+        raw_records = []
+        for key, values in groups.items():
+            observations = list(values.values())
+            forks = sorted({fork for fork, _ in values})
+            fork_medians = [
+                statistics.median(value for (f, _), value in values.items() if f == fork) for fork
+                in forks]
+            q1, _, q3 = statistics.quantiles(observations, n=4, method="inclusive") if len(
+                observations) > 1 else observations * 3
+            raw_records.append(dict(zip(KEY_FIELDS, key),
+                                    median_ns_per_op=statistics.median(observations),
+                                    min_ns_per_op=min(observations),
+                                    max_ns_per_op=max(observations),
+                                    samples=len(observations), q1=q1, q3=q3, forks=len(forks),
+                                    fork_medians=fork_medians, sample_ids=set(values)))
+        validate_records(raw_records)
+        if records:
+            indexed = {record_key(row): row for row in raw_records}
+            if set(indexed) != {record_key(row) for row in records}:
+                raise ValueError("Summary and raw sample coverage differ")
+            for row in records:
+                raw = indexed[record_key(row)]
+                if row["samples"] != raw["samples"] or any(
+                    not math.isclose(row[field], raw[field], rel_tol=1e-9, abs_tol=1e-12) for field
+                    in ("median_ns_per_op", "min_ns_per_op", "max_ns_per_op")):
+                    raise ValueError("Summary and raw samples disagree")
+                row.update(raw)
+        else:
+            records = raw_records
+    if not records:
+        raise ValueError("Benchmark results are empty")
+    validate_records(records, load_metadata(result_dir))
     return records
 
 
-def validate_records(records):
+def validate_records(records, metadata=None):
     if not records:
         raise ValueError("Benchmark results are empty")
     groups = {}
     for record in records:
-        key = tuple(record[field] for field in ("language", "implementation", "kind", "size", "order"))
-        phases = groups.setdefault(key, {})
+        key = record_key(record)[:-1]
         phase = record["phase"]
+        timings = [record[field] for field in
+                   ("min_ns_per_op", "median_ns_per_op", "max_ns_per_op")]
+        if any(not math.isfinite(v) or v < 0 for v in timings) or timings != sorted(timings):
+            raise ValueError(f"Invalid timing values: {key}")
+        if record["kind"] not in ("map", "set") or not record["implementation"].endswith(
+            "_" + record["kind"]) or record["size"] <= 0 or record["order"] not in ("ascending",
+                                                                                    "shuffled"):
+            raise ValueError(f"Invalid workload: {key}")
+        phases = groups.setdefault(key, {})
         if phase not in PHASES or phase in phases or record["samples"] < 1:
             raise ValueError(f"Invalid benchmark phase or sample count: {key}")
-        phases[phase] = record["samples"]
+        phases[phase] = record
     for key, phases in groups.items():
-        if set(phases) != set(PHASES) or len(set(phases.values())) != 1:
+        if set(phases) != set(PHASES) or len({r["samples"] for r in phases.values()}) != 1:
             raise ValueError(f"Incomplete benchmark phases or unequal sample counts: {key}")
+        if "sample_ids" in next(iter(phases.values())) and len(
+            {frozenset(r["sample_ids"]) for r in phases.values()}) != 1:
+            raise ValueError(f"Unequal sample identities: {key}")
+    meta = metadata or {}
+    implementations = meta.get("implementations")
+    if implementations is None:
+        implementations = {}
+        for language, implementation, *_ in groups:
+            implementations.setdefault(language, set()).add(implementation)
+    sizes = meta.get("sizes", sorted({r["size"] for r in records}))
+    orders = meta.get("orders", sorted({r["order"] for r in records}))
+    seeds = meta.get("seeds", sorted({r.get("seed", 42) for r in records}))
+    expected = {(lang, impl, "set" if impl.endswith("set") else "map", size, order, seed)
+                for lang, impls in implementations.items() for impl in impls
+                for size in sizes for order in orders for seed in seeds}
+    if set(groups) != expected:
+        raise ValueError("Incomplete implementation or workload coverage")
+    if "samples_per_fork" in meta:
+        identities = {(fork, sample) for fork in range(meta["forks"]) for sample in
+                      range(meta["samples_per_fork"])}
+        for row in records:
+            if row["samples"] != len(identities) or (
+                "sample_ids" in row and row["sample_ids"] != identities):
+                raise ValueError("Samples differ from the recorded run configuration")
 
 
 def load_metadata(result_dir):
     meta_path = result_dir / "metadata.json"
     if meta_path.exists():
-        try:
-            return json.loads(meta_path.read_text())
-        except Exception:
-            return {}
+        meta = json.loads(meta_path.read_text())
+        if not isinstance(meta, dict):
+            raise ValueError("Metadata must be an object")
+        return meta
     return {}
+
+
+def provenance_rows(meta):
+    return [("Runner environment", meta.get("runner_environment", "Unknown")),
+            ("Dirty working tree", meta.get("dirty", "Unknown")),
+            ("Ordered source", meta.get("ordered_source", "Unknown")),
+            ("Ordered local revision and changes",
+             meta.get("ordered_git", "No local Git information")),
+            ("CPU affinity", meta.get("affinity", "Unknown")),
+            ("Warmups by language", meta.get("warmups", "Unknown")),
+            ("Samples per fork", meta.get("samples_per_fork", "Unknown")),
+            ("Forks", meta.get("forks", "Unknown")),
+            ("Fixture seeds", meta.get("seeds", "Legacy seed 42")),
+            ("Schedule seed", meta.get("schedule_seed", "Legacy fixed order"))]
+
+
+def spread_text(record):
+    if "q1" not in record:
+        return f"Range {record['min_ns_per_op']:.2f}–{record['max_ns_per_op']:.2f}; {record['samples']} samples; IQR and forks unavailable"
+    medians = ", ".join(f"{v:.2f}" for v in record["fork_medians"])
+    return f"IQR {record['q1']:.2f}–{record['q3']:.2f}; {record['samples']} samples; {record['forks']} forks; fork medians [{medians}]"
 
 
 def render_environment(meta):
@@ -179,6 +255,9 @@ def render_environment(meta):
         )
         lines.append(f"| Toolchain Versions | {version_summary} |")
 
+    lines.extend(
+        f"| {label} | `{str(value).replace(chr(10), ' ').replace('|', '/')}` |" for label, value in
+        provenance_rows(meta))
     lines.append("")
     return "\n".join(lines)
 
@@ -186,39 +265,41 @@ def render_environment(meta):
 def render_interpretation_guide():
     return """## Performance Interpretation Guide
 
-This benchmark isolates five fundamental phases of sorted container operations:
-- Insert: Time to insert $N$ keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
-- Lookup hit: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
-- Lookup miss: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
-- Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
-- Remove: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time.
+Ascending and shuffled describe insertion order only. Lookup and removal use independent shuffled permutations. Containers are populated and validated before read and removal phases, so these measure recently accessed data. CI timings are exploratory; publish comparisons from a dedicated idle machine with recorded CPU affinity. This benchmark isolates five phases of sorted container operations:
+- **Insert**: Time to insert $N$ keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
+- **Lookup hit**: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
+- **Lookup miss**: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
+- **Iterate**: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
+- **Remove**: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.
 
-The lowest latency value for each operation column in the tables below is displayed in bold.
+Bold values mark the lowest measured median, not a proven winner. Cells show sample IQR and fork medians when raw data is available. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.
 
-### Key Architectural Comparisons
+### Architectural Comparisons
 
-1. B-trees versus binary trees: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
-2. Intrusive and dedicated AVL trees: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.
-3. Flat arrays: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
-4. Java boxed collections versus primitive specialization: Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), demonstrating the true algorithmic capacity of the JVM without object wrappers.
+1. **B-trees versus binary trees**: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
+2. **Intrusive and dedicated AVL trees**: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.
+3. **Flat arrays**: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
+4. **Java boxed collections versus primitive specialization**: Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.
 """
 
 
-def format_metric(val, best_val):
+def format_metric(val, best_val, runner_up_vals=None):
     if val is None:
         return "-"
     formatted = f"{val:.2f}"
-    if best_val is not None and formatted == f"{best_val:.2f}":
+    if best_val is not None and val == best_val:
         return f"**{formatted}**"
     return formatted
 
 
-def format_html_metric(val, best_val):
+def format_html_metric(val, best_val, runner_up_vals=None):
     if val is None:
         return "-"
     formatted = f"{val:.2f}"
-    if best_val is not None and formatted == f"{best_val:.2f}":
+    if best_val is not None and val == best_val:
         return f'<strong class="best">{formatted}</strong>'
+    if runner_up_vals is not None and val in runner_up_vals:
+        return f'<span class="runner-up">{formatted}</span>'
     return formatted
 
 
@@ -275,15 +356,16 @@ def generate_report(records, metadata):
     lines.append(render_environment(metadata))
     lines.append(render_interpretation_guide())
 
-    combos = sorted({(r["size"], r["order"]) for r in records})
+    combos = sorted({(r["size"], r["order"], r.get("seed", 42)) for r in records},
+                    key=lambda c: (-c[0], c[1], c[2]))
 
     lines.append("## Benchmark Results by Workload")
     lines.append("")
 
-    for size, order in combos:
+    for size, order, seed in combos:
         size_label = f"{size:,}"
         order_title = "Ascending Keys" if order == "ascending" else "Shuffled Keys"
-        lines.append(f"### Workload: Size = {size_label} Elements ({order_title})")
+        lines.append(f"### Workload: Size = {size_label} Elements ({order_title}, Seed {seed})")
         lines.append("")
 
         for kind in ("map", "set"):
@@ -294,7 +376,8 @@ def generate_report(records, metadata):
             matching = [
                 r
                 for r in records
-                if r["size"] == size and r["order"] == order and r["kind"] == kind
+                if r["size"] == size and r["order"] == order and r.get("seed", 42) == seed and r[
+                    "kind"] == kind
             ]
             if not matching:
                 continue
@@ -304,21 +387,27 @@ def generate_report(records, metadata):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
+            details = {
+                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
+                    spread_text(r)) + "</small>"
+                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
+            runners_up_by_phase = {}
             for phase in PHASES:
                 vals = [
                     phases[phase]
                     for phases in by_impl.values()
-                    if phase in phases and phases[phase] > 0
+                    if phase in phases and phases[phase] >= 0
                 ]
                 if vals:
-                    best_by_phase[phase] = min(vals)
+                    sorted_vals = sorted(vals)
+                    best_by_phase[phase] = sorted_vals[0]
+                    remaining = [v for v in sorted_vals if v != sorted_vals[0]]
+                    runners_up_by_phase[phase] = set(remaining[:2])
 
             chart_labels = []
-            chart_hit_values = []
-            chart_iter_values = []
 
             table_rows = [
                 "| Language | Implementation | Data Structure | Insert (ns/op) | Lookup Hit (ns/op) | Lookup Miss (ns/op) | Iterate (ns/op) | Remove (ns/op) |",
@@ -334,29 +423,63 @@ def generate_report(records, metadata):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = format_metric(phases.get("insert"), best_by_phase.get("insert"))
-                hit_str = format_metric(phases.get("hit"), best_by_phase.get("hit"))
-                miss_str = format_metric(phases.get("miss"), best_by_phase.get("miss"))
-                iter_str = format_metric(phases.get("iterate"), best_by_phase.get("iterate"))
-                remove_str = format_metric(phases.get("remove"), best_by_phase.get("remove"))
+                insert_str = format_metric(phases.get("insert"), best_by_phase.get("insert"),
+                                           runners_up_by_phase.get("insert")) + details.get(
+                    (lang, impl, "insert"), "")
+                hit_str = format_metric(phases.get("hit"), best_by_phase.get("hit"),
+                                        runners_up_by_phase.get("hit")) + details.get(
+                    (lang, impl, "hit"), "")
+                miss_str = format_metric(phases.get("miss"), best_by_phase.get("miss"),
+                                         runners_up_by_phase.get("miss")) + details.get(
+                    (lang, impl, "miss"), "")
+                iter_str = format_metric(phases.get("iterate"), best_by_phase.get("iterate"),
+                                         runners_up_by_phase.get("iterate")) + details.get(
+                    (lang, impl, "iterate"), "")
+                remove_str = format_metric(phases.get("remove"), best_by_phase.get("remove"),
+                                           runners_up_by_phase.get("remove")) + details.get(
+                    (lang, impl, "remove"), "")
 
                 table_rows.append(
                     f"| {lang} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"
                 )
 
                 chart_labels.append(short_label)
-                chart_hit_values.append(phases.get("hit"))
-                chart_iter_values.append(phases.get("iterate"))
 
             lines.append("\n".join(table_rows))
             lines.append("")
 
-            chart_title_hit = f"{kind_title}: Lookup Hit Latency (N = {size_label}, {order_title})"
-            lines.append(render_chart(chart_title_hit, chart_labels, chart_hit_values))
+            for phase in PHASES:
+                values = [by_impl[key].get(phase) for key in sorted_impls]
+                title = f"{kind_title} {phase.title()} Latency (N = {size_label}, {order_title}, Seed {seed})"
+                chart = render_chart(title, chart_labels, values)
+                lines.append(chart)
 
-            chart_title_iter = f"{kind_title}: Sorted Iteration Latency (N = {size_label}, {order_title})"
-            lines.append(render_chart(chart_title_iter, chart_labels, chart_iter_values))
+    lines.extend(["## Latency by Dataset Size", "",
+                  "The x-axis shows element counts with equal spacing between measured sizes.", "",
+                  scaling_charts(records)])
+    return "\n".join(lines)
 
+
+def scaling_charts(records, as_html=False):
+    lines = []
+    groups = {}
+    for row in records:
+        key = (row["kind"], row["order"], row.get("seed", 42), row["phase"], row["language"],
+               row["implementation"])
+        groups.setdefault(key, []).append(row)
+    for (kind, order, seed, phase, language, impl), rows in sorted(groups.items()):
+        rows.sort(key=lambda r: r["size"])
+        if len(rows) < 2:
+            continue
+        title = f"{language} {impl} {phase.title()} Scaling ({order}, Seed {seed})"
+        code = render_chart_code(title, [str(r["size"]) for r in rows],
+                                 [r["median_ns_per_op"] for r in rows]).replace("    bar [",
+                                                                                "    line [")
+        if as_html:
+            lines.append(
+                f'<div data-kind="{kind}" data-order="{order}" data-phase="{phase}"><h3>{html.escape(title)}</h3><pre class="mermaid">{html.escape(code)}</pre></div>')
+        else:
+            lines.append(f"### {title}\n\n```mermaid\n{code}\n```\n")
     return "\n".join(lines)
 
 
@@ -380,6 +503,8 @@ def render_html_environment(meta):
         ("Git Revision", f"<code>{html.escape(str(revision))}</code>"),
         ("Timestamp (UTC)", f"<code>{html.escape(str(started))}</code>"),
     ]
+
+    rows.extend((label, html.escape(str(value))) for label, value in provenance_rows(meta))
 
     versions = meta.get("versions", {})
     if versions:
@@ -412,37 +537,39 @@ def render_html_environment(meta):
 def render_html_interpretation_guide():
     return """  <section class="card" id="interpretation-guide">
     <h2>Performance Interpretation Guide</h2>
-    <p>This benchmark isolates five fundamental phases of sorted container operations:</p>
+    <p>Ascending and shuffled describe insertion order only. Lookup and removal use independent shuffled permutations. Containers are populated and validated before read and removal phases, so these measure recently accessed data. CI timings are exploratory; publish comparisons from a dedicated idle machine with recorded CPU affinity. This benchmark isolates five phases of sorted container operations:</p>
     <ul>
-      <li>Insert: Time to insert <em>N</em> keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
+      <li>Insert: Time to insert <em>N</em> keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
       <li>Lookup hit: Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
       <li>Lookup miss: Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
       <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
-      <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time.</li>
+      <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
     </ul>
-    <p>The lowest latency value for each operation column in the tables below is displayed with bold text and a green highlight.</p>
+    <p>Bold green values mark the lowest measured median, and light orange values mark the next two lowest medians, not proven winners. Cells show sample IQR, sample counts, fork counts, and fork medians. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
-      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
-      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.</li>
-      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
-      <li>Java boxed collections versus primitive specialization: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), demonstrating the true algorithmic capacity of the JVM without object wrappers.</li>
+      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
+      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.</li>
+      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
+      <li>Java boxed collections versus primitive specialization: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.</li>
     </ol>
   </section>"""
 
 
 def generate_html_report(records, metadata, downloads=()):
-    combos = sorted({(r["size"], r["order"]) for r in records})
+    combos = sorted({(r["size"], r["order"], r.get("seed", 42)) for r in records},
+                    key=lambda c: (-c[0], c[1], c[2]))
 
     nav_links = [
         '        <a class="btn" href="#system-environment">System Environment</a>',
         '        <a class="btn" href="#interpretation-guide">Interpretation Guide</a>',
     ]
-    for size, order in combos:
+    for size, order, seed in combos:
         size_label = f"{size:,}"
         order_title = "Ascending" if order == "ascending" else "Shuffled"
-        anchor = f"workload-{size}-{order}"
-        nav_links.append(f'        <a class="btn" href="#{anchor}">Size {size_label} ({order_title})</a>')
+        anchor = f"workload-{size}-{order}-{seed}"
+        nav_links.append(
+            f'        <a class="btn" href="#{anchor}">Size {size_label} ({order_title}, Seed {seed})</a>')
 
     lines = [
         "<!DOCTYPE html>",
@@ -462,6 +589,8 @@ def generate_html_report(records, metadata, downloads=()):
         "      --table-stripe: #f8fafc;",
         "      --best-bg: #dcfce7;",
         "      --best-color: #166534;",
+        "      --runner-up-bg: #ffedd5;",
+        "      --runner-up-color: #9a3412;",
         "      --accent: #2563eb;",
         "      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;",
         "    }",
@@ -476,6 +605,8 @@ def generate_html_report(records, metadata, downloads=()):
         "        --table-stripe: #161b22;",
         "        --best-bg: #0f3d24;",
         "        --best-color: #7ee787;",
+        "        --runner-up-bg: #431407;",
+        "        --runner-up-color: #fdba74;",
         "        --accent: #58a6ff;",
         "      }",
         "    }",
@@ -532,6 +663,8 @@ def generate_html_report(records, metadata, downloads=()):
         "    th { background: var(--table-header); font-weight: 600; }",
         "    tr:nth-child(even) td { background: var(--table-stripe); }",
         "    tr:last-child td { border-bottom: none; }",
+        "    td small { display: block; min-width: 11rem; color: var(--text-muted); font-size: 0.7rem; }",
+        "    [hidden] { display: none !important; }",
         "    td.num, th.num {",
         "      text-align: right;",
         "      font-variant-numeric: tabular-nums;",
@@ -584,6 +717,13 @@ def generate_html_report(records, metadata, downloads=()):
         "      padding: 0.15rem 0.35rem;",
         "      border-radius: 4px;",
         "    }",
+        "    .runner-up {",
+        "      font-weight: 600;",
+        "      color: var(--runner-up-color);",
+        "      background: var(--runner-up-bg);",
+        "      padding: 0.15rem 0.35rem;",
+        "      border-radius: 4px;",
+        "    }",
         "    .chart-card {",
         "      background: var(--card-bg);",
         "      border: 1px solid var(--border);",
@@ -627,27 +767,38 @@ def generate_html_report(records, metadata, downloads=()):
         "    </header>",
         render_html_environment(metadata),
         render_html_interpretation_guide(),
+        '<div class="card" id="filters">',
+        '<label>Operation <select id="phase-filter"><option value="">All</option>' + ''.join(
+            f'<option value="{phase}">{phase.title()}</option>' for phase in
+            PHASES) + '</select></label>',
+        '<label> Container <select id="kind-filter"><option value="">All</option><option value="map">Map</option><option value="set">Set</option></select></label>',
+        '<label> Insertion order <select id="order-filter"><option value="">All</option><option value="ascending">Ascending</option><option value="shuffled">Shuffled</option></select></label>',
+        '</div>',
         '    <section id="results-by-workload">',
         "      <h2>Benchmark Results by Workload</h2>",
     ]
 
-    for size, order in combos:
+    for size, order, seed in combos:
         size_label = f"{size:,}"
         order_title = "Ascending Keys" if order == "ascending" else "Shuffled Keys"
-        anchor = f"workload-{size}-{order}"
-        lines.append(f'      <section id="{anchor}" class="workload-section">')
-        lines.append(f"        <h3>Workload: Size = {size_label} Elements ({order_title})</h3>")
+        anchor = f"workload-{size}-{order}-{seed}"
+        lines.append(f'      <section id="{anchor}" class="workload-section" data-order="{order}">')
+        lines.append(
+            f"        <h3>Workload: Size = {size_label} Elements ({order_title}, Seed {seed})</h3>")
 
         for kind in ("map", "set"):
             kind_title = "Sorted Maps" if kind == "map" else "Sorted Sets"
+            lines.append(f'<div data-kind="{kind}" data-order="{order}">')
             lines.append(f"        <h4>{kind_title}</h4>")
 
             matching = [
                 r
                 for r in records
-                if r["size"] == size and r["order"] == order and r["kind"] == kind
+                if r["size"] == size and r["order"] == order and r.get("seed", 42) == seed and r[
+                    "kind"] == kind
             ]
             if not matching:
+                lines.append("</div>")
                 continue
 
             by_impl = {}
@@ -655,21 +806,27 @@ def generate_html_report(records, metadata, downloads=()):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
+            details = {
+                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
+                    spread_text(r)) + "</small>"
+                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
+            runners_up_by_phase = {}
             for phase in PHASES:
                 vals = [
                     phases[phase]
                     for phases in by_impl.values()
-                    if phase in phases and phases[phase] > 0
+                    if phase in phases and phases[phase] >= 0
                 ]
                 if vals:
-                    best_by_phase[phase] = min(vals)
+                    sorted_vals = sorted(vals)
+                    best_by_phase[phase] = sorted_vals[0]
+                    remaining = [v for v in sorted_vals if v != sorted_vals[0]]
+                    runners_up_by_phase[phase] = set(remaining[:2])
 
             chart_labels = []
-            chart_hit_values = []
-            chart_iter_values = []
 
             table_rows = [
                 '        <div class="table-container">',
@@ -698,11 +855,11 @@ def generate_html_report(records, metadata, downloads=()):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert"))
-                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit"))
-                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss"))
-                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate"))
-                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove"))
+                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert"), runners_up_by_phase.get("insert")) + details.get((lang, impl, "insert"), "")
+                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit"), runners_up_by_phase.get("hit")) + details.get((lang, impl, "hit"), "")
+                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss"), runners_up_by_phase.get("miss")) + details.get((lang, impl, "miss"), "")
+                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate"), runners_up_by_phase.get("iterate")) + details.get((lang, impl, "iterate"), "")
+                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove"), runners_up_by_phase.get("remove")) + details.get((lang, impl, "remove"), "")
 
                 table_rows.append(
                     f"              <tr>"
@@ -718,8 +875,6 @@ def generate_html_report(records, metadata, downloads=()):
                 )
 
                 chart_labels.append(short_label)
-                chart_hit_values.append(phases.get("hit"))
-                chart_iter_values.append(phases.get("iterate"))
 
             table_rows.extend([
                 "            </tbody>",
@@ -728,21 +883,38 @@ def generate_html_report(records, metadata, downloads=()):
             ])
             lines.extend(table_rows)
 
-            chart_title_hit = f"{kind_title}: Lookup Hit Latency (N = {size_label}, {order_title})"
-            lines.append(render_html_chart(chart_title_hit, chart_labels, chart_hit_values))
-
-            chart_title_iter = f"{kind_title}: Sorted Iteration Latency (N = {size_label}, {order_title})"
-            lines.append(render_html_chart(chart_title_iter, chart_labels, chart_iter_values))
+            for phase in PHASES:
+                values = [by_impl[key].get(phase) for key in sorted_impls]
+                title = f"{kind_title} {phase.title()} Latency (N = {size_label}, {order_title}, Seed {seed})"
+                chart = render_html_chart(title, chart_labels, values)
+                lines.append(f'<div data-phase="{phase}">{chart}</div>')
+            lines.append("</div>")
 
         lines.append("      </section>")
 
     lines.extend([
         "    </section>",
+        "<h2>Latency by Dataset Size</h2>",
+        "<p>The x-axis shows element counts with equal spacing between measured sizes.</p>",
+        scaling_charts(records, as_html=True),
         "    <footer>",
         "      <p>Ordered Benchmarks Suite</p>",
         "    </footer>",
         "  </div>",
         "  <script>",
+        "    const phases = ['insert', 'hit', 'miss', 'iterate', 'remove'];",
+        "    function filterResults() {",
+        "      const phase = document.getElementById('phase-filter').value;",
+        "      const kind = document.getElementById('kind-filter').value;",
+        "      const order = document.getElementById('order-filter').value;",
+        "      document.querySelectorAll('[data-kind], [data-phase], .workload-section').forEach(el => {",
+        "        el.hidden = Boolean((el.dataset.kind && kind && el.dataset.kind !== kind) || (el.dataset.order && order && el.dataset.order !== order) || (el.dataset.phase && phase && el.dataset.phase !== phase));",
+        "      });",
+        "      document.querySelectorAll('table.sortable tr').forEach(row => {",
+        "        Array.from(row.cells).forEach((cell, index) => { cell.hidden = index >= 3 && Boolean(phase && phases[index - 3] !== phase); });",
+        "      });",
+        "    }",
+        "    document.querySelectorAll('#filters select').forEach(el => el.addEventListener('change', filterResults));",
         "    document.querySelectorAll('table.sortable').forEach((table) => {",
         "      const headers = table.querySelectorAll('thead th');",
         "      const tbody = table.querySelector('tbody');",
@@ -803,7 +975,8 @@ def build_site(results_dir, site_dir):
     metadata = load_metadata(results_dir)
 
     report_md = generate_report(records, metadata)
-    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if
+                                                           (results_dir / name).is_file()])
 
     (site_dir / "index.html").write_text(report_html, encoding="utf-8")
     (site_dir / "REPORT.md").write_text(report_md, encoding="utf-8")
@@ -856,7 +1029,8 @@ def main():
     in_dir_report.write_text(report_md, encoding="utf-8")
     print(f"Copy written to: {in_dir_report}")
 
-    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if
+                                                           (results_dir / name).is_file()])
     in_dir_html = results_dir / "index.html"
     in_dir_html.write_text(report_html, encoding="utf-8")
     print(f"Copy written to: {in_dir_html}")

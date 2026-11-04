@@ -54,7 +54,7 @@ format: ## Format Zig, Rust, and Nix files
 
 smoke: build ## Run a short benchmark to verify result collection
 	@echo "Running the smoke benchmark..."
-	$(PYTHON) $(HARNESS) bench --sizes 1000 --warmups 1 --samples 1 --forks 1 $(ARGS)
+	$(PYTHON) $(HARNESS) bench --sizes 1000 --seeds 42 --warmups 1 --samples 1 --forks 1 $(ARGS)
 
 bench: build ## Run benchmarks with the default workloads or ARGS overrides
 	@echo "Running benchmarks..."

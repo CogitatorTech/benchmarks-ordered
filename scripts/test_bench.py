@@ -1,10 +1,11 @@
-import csv
 import copy
-from pathlib import Path
+import csv
+import json
 import struct
 import tempfile
-from types import SimpleNamespace
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import bench
@@ -24,7 +25,63 @@ class HarnessTests(unittest.TestCase):
                 self.assertEqual(sorted(array), list(range(0, 62, 2)))
             self.assertEqual(len(set(arrays)), 3)
             bench.fixture(path, 31, "ascending")
-            self.assertEqual(struct.unpack_from("<31q", path.read_bytes(), 8), tuple(range(0, 62, 2)))
+            self.assertEqual(struct.unpack_from("<31q", path.read_bytes(), 8),
+                             tuple(range(0, 62, 2)))
+
+    def test_fixture_seeds_change_all_permutations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.bin"
+            arrays = []
+            for seed in (42, 123):
+                bench.fixture(path, 31, "shuffled", seed)
+                arrays.append(
+                    [struct.unpack_from("<31q", path.read_bytes(), 8 + i * 31 * 8) for i in
+                     range(3)])
+            for first, second in zip(*arrays):
+                self.assertNotEqual(first, second)
+                self.assertEqual(sorted(first), sorted(second))
+
+    def test_randomized_rounds_preserve_fork_and_seed_identity(self):
+        output = "\n".join(f"{phase},10" for phase in bench.PHASES)
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(sizes="2", output=str(Path(directory) / "results"),
+                                   warmups=0, samples=1, forks=3, seeds="42,123", cpu=None,
+                                   schedule_seed=1729)
+            with patch.object(bench, "require_env"), patch.object(bench, "metadata",
+                                                                  return_value={}), \
+                patch.object(bench, "IMPLS", {"rust": ["btree_map", "btree_set"]}), \
+                patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)) as runner:
+                bench.bench(args, ["rust"])
+            jobs = [call.args[0][1] for call in runner.call_args_list]
+            self.assertGreater(len({tuple(jobs[i:i + 2]) for i in range(0, len(jobs), 2)}), 1)
+            import report
+            records = report.load_records(Path(args.output))
+            self.assertEqual(len(records), 40)
+            self.assertEqual({r["seed"] for r in records}, {42, 123})
+            self.assertTrue(all(r["forks"] == 3 for r in records))
+
+    def test_java_rounds_keep_global_fork_ids(self):
+        results = [{"benchmark": "bench.CollectionsBench." + phase,
+                    "primaryMetric": {"scoreUnit": "ns/op", "rawData": [[10, 20]]}}
+                   for phase in bench.PHASES]
+
+        def fake_run(command, **kwargs):
+            self.assertEqual(command[command.index("-f") + 1], "1")
+            Path(command[command.index("-rff") + 1]).write_text(json.dumps(results))
+
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(sizes="2", output=str(Path(directory) / "results"),
+                                   warmups=1, samples=2, forks=2, seeds="42", cpu=None,
+                                   schedule_seed=1729)
+            with patch.object(bench, "require_env"), patch.object(bench, "metadata",
+                                                                  return_value={}), \
+                patch.object(bench, "IMPLS", {"java": ["tree_map"]}), \
+                patch.object(bench, "run", side_effect=fake_run):
+                bench.bench(args, ["java"])
+            import report
+            rows = report.load_records(Path(args.output))
+            self.assertTrue(all(r["samples"] == 4 and r["forks"] == 2 for r in rows))
+            self.assertEqual(len(list(Path(args.output).glob("jmh-*.json"))), 4)
 
     def test_empty_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -35,9 +92,17 @@ class HarnessTests(unittest.TestCase):
     def test_native_output_validation(self):
         good = "\n".join(f"{phase},10" for phase in bench.PHASES)
         self.assertEqual(bench.parse_native(good), dict.fromkeys(bench.PHASES, 10))
-        for bad in ("", good.replace("insert", "unknown"), good.replace("10", "-1"), good + "\ninsert,10", "insert,wrong"):
+        for bad in ("", good.replace("insert", "unknown"), good.replace("10", "-1"),
+                    good + "\ninsert,10", "insert,wrong"):
             with self.subTest(bad=bad), self.assertRaises((ValueError, csv.Error)):
                 bench.parse_native(bad)
+
+    def test_correctness_checks_reject_a_runner_that_accepts_duplicate_keys(self):
+        output = "\n".join(f"{phase},10" for phase in bench.PHASES)
+        with patch.object(bench, "IMPLS", {"rust": ["btree_map"]}), \
+            patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)):
+            with self.assertRaisesRegex(ValueError, "accepted duplicate keys"):
+                bench.check(["rust"])
 
     def test_jmh_samples_and_validation(self):
         results = [{"benchmark": "bench.CollectionsBench." + phase,
@@ -70,15 +135,18 @@ class HarnessTests(unittest.TestCase):
         output = "\n".join(f"{phase},10" for phase in bench.PHASES)
         with tempfile.TemporaryDirectory() as directory:
             args = SimpleNamespace(sizes="1", output=str(Path(directory) / "success"),
-                                   warmups=0, samples=1, forks=1)
-            with patch.object(bench, "require_env"), patch.object(bench, "metadata", return_value={}), \
-                 patch.object(bench, "IMPLS", {"rust": ["btree_map"]}), \
-                 patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)):
+                                   warmups=0, samples=1, forks=1, seeds="42", cpu=None,
+                                   schedule_seed=1729)
+            with patch.object(bench, "require_env"), patch.object(bench, "metadata",
+                                                                  return_value={}), \
+                patch.object(bench, "IMPLS", {"rust": ["btree_map"]}), \
+                patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)):
                 bench.bench(args, ["rust"])
                 self.assertTrue((Path(args.output) / "summary.csv").is_file())
                 self.assertFalse((Path(args.output) / "summary.csv.tmp").exists())
                 args.output = str(Path(directory) / "failed")
-                with patch.object(bench.statistics, "median", side_effect=ValueError("interrupted")):
+                with patch.object(bench.statistics, "median",
+                                  side_effect=ValueError("interrupted")):
                     with self.assertRaisesRegex(ValueError, "interrupted"):
                         bench.bench(args, ["rust"])
                 self.assertFalse((Path(args.output) / "summary.csv").exists())

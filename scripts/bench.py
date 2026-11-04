@@ -6,7 +6,6 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import platform
 import random
 import shutil
@@ -15,15 +14,18 @@ import struct
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build"
 IMPLS = {
-    "zig": ["btree_map", "cartesian_map", "skiplist_map", "sorted_set", "redblack_set", "treap_map", "treap_set"],
+    "zig": ["btree_map", "cartesian_map", "skiplist_map", "sorted_set", "redblack_set", "treap_map",
+            "treap_set"],
     "rust": ["btree_map", "btree_set", "indexset_map", "indexset_set"],
     "c": ["kbtree_map", "kbtree_set", "kavl_map", "kavl_set", "btree_map", "btree_set"],
     "cpp": ["std_map", "std_set", "absl_map", "absl_set", "boost_flat_map", "boost_flat_set"],
-    "java": ["tree_map", "tree_set", "fastutil_avl_map", "fastutil_avl_set", "fastutil_rb_map", "fastutil_rb_set"],
+    "java": ["tree_map", "tree_set", "fastutil_avl_map", "fastutil_avl_set", "fastutil_rb_map",
+             "fastutil_rb_set"],
 }
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
 
@@ -32,15 +34,15 @@ def run(cmd, **kwargs):
     return subprocess.run([str(x) for x in cmd], check=True, **kwargs)
 
 
-def fixture(path, size, order):
+def fixture(path, size, order, seed=42):
     """The file is little-endian u64 count followed by three i64 key arrays."""
     insertion = list(range(0, size * 2, 2))
     if order == "shuffled":
-        random.Random(42).shuffle(insertion)
+        random.Random(seed).shuffle(insertion)
     lookup = list(range(0, size * 2, 2))
     removal = lookup.copy()
-    random.Random(43).shuffle(lookup)
-    random.Random(44).shuffle(removal)
+    random.Random(seed + 1).shuffle(lookup)
+    random.Random(seed + 2).shuffle(removal)
     with path.open("wb") as out:
         out.write(struct.pack("<Q", size))
         for keys in (insertion, lookup, removal):
@@ -57,29 +59,39 @@ def build(languages):
     require_env()
     BUILD.mkdir(exist_ok=True)
     if "zig" in languages:
-        run([os.environ.get("ZIG", "zig"), "build", "-Doptimize=ReleaseFast", "-Dordered=" + os.environ["ORDERED_SOURCE"]], cwd=ROOT)
+        run([os.environ.get("ZIG", "zig"), "build", "-Doptimize=ReleaseFast",
+             "-Dordered=" + os.environ["ORDERED_SOURCE"]], cwd=ROOT)
     if "rust" in languages:
-        run([os.environ.get("CARGO", "cargo"), "build", "--manifest-path", ROOT / "benchmarks/rust/Cargo.toml", "--release", "--locked"], cwd=ROOT)
+        run([os.environ.get("CARGO", "cargo"), "build", "--manifest-path",
+             ROOT / "benchmarks/rust/Cargo.toml", "--release", "--locked"], cwd=ROOT)
     if "c" in languages:
         for kind in ("map", "set"):
             flags = ["-DBENCH_SET"] if kind == "set" else []
-            run(["cc", "-O3", "-std=c11", "-Wall", "-Wextra", "-I", ROOT / "benchmarks/common", *flags, "-I" + os.environ["KLIB_SOURCE"], "-I" + os.environ["BTREE_C_SOURCE"], Path(os.environ["BTREE_C_SOURCE"]) / "btree.c", ROOT / "benchmarks/c/main.c", "-o", BUILD / ("c-" + kind)])
+            run(["cc", "-O3", "-std=c11", "-Wall", "-Wextra", "-I", ROOT / "benchmarks/common",
+                 *flags, "-I" + os.environ["KLIB_SOURCE"], "-I" + os.environ["BTREE_C_SOURCE"],
+                 Path(os.environ["BTREE_C_SOURCE"]) / "btree.c", ROOT / "benchmarks/c/main.c", "-o",
+                 BUILD / ("c-" + kind)])
     if "cpp" in languages:
         prefix_path = os.environ["ABSEIL_PREFIX"] + ";" + os.environ["BOOST_PREFIX"]
-        run(["cmake", "-S", ROOT, "-B", BUILD / "cpp-build", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_PREFIX_PATH=" + prefix_path])
+        run(["cmake", "-S", ROOT, "-B", BUILD / "cpp-build", "-G", "Ninja",
+             "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_PREFIX_PATH=" + prefix_path])
         run(["cmake", "--build", BUILD / "cpp-build"])
     if "java" in languages:
         run(["mvn", "-q", "-f", ROOT / "benchmarks/java/pom.xml", "clean", "package"], cwd=ROOT)
 
 
 def native_command(language, impl, data):
-    exe = {"zig": ROOT / "zig-out/bin/zig-bench", "rust": ROOT / "benchmarks/rust/target/release/rust-bench", "c": BUILD / ("c-set" if impl.endswith("set") else "c-map"), "cpp": BUILD / "cpp-build/cpp-bench"}[language]
+    exe = {"zig": ROOT / "zig-out/bin/zig-bench",
+           "rust": ROOT / "benchmarks/rust/target/release/rust-bench",
+           "c": BUILD / ("c-set" if impl.endswith("set") else "c-map"),
+           "cpp": BUILD / "cpp-build/cpp-bench"}[language]
     return [exe, impl, data]
 
 
 def parse_native(output):
     rows = list(csv.reader(output.splitlines()))
-    if len(rows) != len(PHASES) or any(len(r) != 2 for r in rows) or tuple(r[0] for r in rows) != PHASES:
+    if len(rows) != len(PHASES) or any(len(r) != 2 for r in rows) or tuple(
+        r[0] for r in rows) != PHASES:
         raise ValueError("Runner returned an incomplete or unordered phase list")
     result = {}
     for phase, elapsed in rows:
@@ -109,93 +121,138 @@ def jmh_samples(results, forks, samples):
 
 def metadata(languages):
     versions = {}
-    for name, cmd in {"zig": [os.environ.get("ZIG", "zig"), "version"], "rust": ["rustc", "--version"], "c": ["cc", "--version"], "cpp": ["c++", "--version"], "java": ["java", "-version"]}.items():
+    for name, cmd in {"zig": [os.environ.get("ZIG", "zig"), "version"],
+                      "rust": ["rustc", "--version"], "c": ["cc", "--version"],
+                      "cpp": ["c++", "--version"], "java": ["java", "-version"]}.items():
         if name in languages:
             version = run(cmd, capture_output=True, text=True)
             versions[name] = (version.stdout.strip() or version.stderr.strip())
-    revision = run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip() if (ROOT / ".git").exists() else "staged"
-    status = run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout if (ROOT / ".git").exists() else "staged"
+    revision = run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                   text=True).stdout.strip() if (ROOT / ".git").exists() else "staged"
+    status = run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True,
+                 text=True).stdout if (ROOT / ".git").exists() else "staged"
     cpu = platform.processor()
     if Path("/proc/cpuinfo").exists():
-        cpu = next((s.split(":", 1)[1].strip() for s in Path("/proc/cpuinfo").read_text().splitlines() if s.startswith("model name")), cpu)
+        cpu = next(
+            (s.split(":", 1)[1].strip() for s in Path("/proc/cpuinfo").read_text().splitlines() if
+             s.startswith("model name")), cpu)
     ordered_path = Path(os.environ["ORDERED_SOURCE"])
     ordered_git = None
     if (ordered_path / ".git").exists():
         ordered_git = {
-            "revision": run(["git", "rev-parse", "HEAD"], cwd=ordered_path, capture_output=True, text=True).stdout.strip(),
-            "status": run(["git", "status", "--porcelain"], cwd=ordered_path, capture_output=True, text=True).stdout,
-            "diff": run(["git", "diff", "HEAD"], cwd=ordered_path, capture_output=True, text=True).stdout,
+            "revision": run(["git", "rev-parse", "HEAD"], cwd=ordered_path, capture_output=True,
+                            text=True).stdout.strip(),
+            "status": run(["git", "status", "--porcelain"], cwd=ordered_path, capture_output=True,
+                          text=True).stdout,
+            "diff": run(["git", "diff", "HEAD"], cwd=ordered_path, capture_output=True,
+                        text=True).stdout,
         }
     governor = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
     return {"started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "ordered_git": ordered_git,
-            "affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
+            "affinity": sorted(os.sched_getaffinity(0)) if hasattr(os,
+                                                                   "sched_getaffinity") else None,
             "governor": governor.read_text().strip() if governor.exists() else None,
-            "platform": platform.platform(), "cpu": cpu, "python": sys.version, "versions": versions,
+            "platform": platform.platform(), "cpu": cpu, "python": sys.version,
+            "versions": versions,
             "revision": revision, "dirty": bool(status), "git_status": status,
-            "ordered_source": os.environ.get("ORDERED_SOURCE"), "klib_source": os.environ.get("KLIB_SOURCE"),
+            "ordered_source": os.environ.get("ORDERED_SOURCE"),
+            "klib_source": os.environ.get("KLIB_SOURCE"),
             "btree_c_source": os.environ.get("BTREE_C_SOURCE"),
-            "abseil_prefix": os.environ.get("ABSEIL_PREFIX"), "boost_prefix": os.environ.get("BOOST_PREFIX"),
+            "abseil_prefix": os.environ.get("ABSEIL_PREFIX"),
+            "boost_prefix": os.environ.get("BOOST_PREFIX"),
             "flake_lock": json.loads((ROOT / "flake.lock").read_text()),
-            "argv": sys.argv, "native_allocator": "system malloc; Zig libc_allocator", "native_flags": "ReleaseFast / Cargo release / -O3 / CMake Release", "java_heap": "-Xms1g -Xmx1g"}
+            "argv": sys.argv, "native_allocator": "system malloc; Zig libc_allocator",
+            "native_flags": "ReleaseFast / Cargo release / -O3 / CMake Release",
+            "java_heap": "-Xms1g -Xmx1g"}
 
 
 def bench(args, languages):
     require_env()
     sizes = [int(n) for n in args.sizes.split(",")]
+    seeds = [int(n) for n in args.seeds.split(",")]
+    if not seeds or len(set(seeds)) != len(seeds) or len(set(sizes)) != len(sizes):
+        raise ValueError("Sizes and seeds must be unique")
+    if args.cpu is not None:
+        os.sched_setaffinity(0, {args.cpu})
     if any(n <= 0 or n > 10_000_000 for n in sizes):
         raise ValueError("Sizes must be between 1 and 10000000")
     dest = Path(args.output or ROOT / "results" / time.strftime("%Y%m%d-%H%M%S"))
     dest.mkdir(parents=True, exist_ok=False)
-    (dest / "metadata.json").write_text(json.dumps(metadata(languages), indent=2) + "\n")
+    meta = metadata(languages)
+    meta.update({"schema_version": 2, "implementations": {lang: IMPLS[lang] for lang in languages},
+                 "sizes": sizes, "orders": ["ascending", "shuffled"], "seeds": seeds,
+                 "samples_per_fork": args.samples, "forks": args.forks,
+                 "warmups": {lang: args.warmups if args.warmups is not None else (
+                     20 if lang == "java" else 3) for lang in languages},
+                 "schedule_seed": args.schedule_seed,
+                 "runner_environment": "GitHub-hosted CI" if os.environ.get(
+                     "GITHUB_ACTIONS") == "true" and os.environ.get(
+                     "RUNNER_ENVIRONMENT") == "github-hosted" else (
+                     "CI" if os.environ.get("CI") else "local")})
+    (dest / "metadata.json").write_text(json.dumps(meta, indent=2) + "\n")
     shutil.copyfile(ROOT / "flake.lock", dest / "flake.lock")
     samples = []
     with (dest / "samples.csv").open("w", newline="") as out:
         writer = csv.writer(out)
-        header = ["language", "implementation", "kind", "size", "order", "phase", "fork", "sample", "ns_per_op"]
+        header = ["language", "implementation", "kind", "size", "order", "seed", "phase", "fork",
+                  "sample", "ns_per_op"]
         writer.writerow(header)
+        schedule = random.Random(args.schedule_seed)
         for size in sizes:
             for order in ("ascending", "shuffled"):
-                data = dest / f"{size}-{order}.bin"
-                fixture(data, size, order)
-                (dest / f"{size}-{order}.sha256").write_text(hashlib.sha256(data.read_bytes()).hexdigest() + "\n")
-                for language in languages:
-                    warmups = args.warmups if args.warmups is not None else (20 if language == "java" else 3)
-                    for impl in IMPLS[language]:
-                        kind = "set" if impl.endswith("set") else "map"
-                        print(f"{language} {impl} {size} {order}", flush=True)
-                        if language == "java":
-                            result = dest / f"jmh-{impl}-{size}-{order}.json"
-                            cmd = ["java", "-jar", ROOT / "benchmarks/java/target/benchmarks.jar", "bench.CollectionsBench.*", "-p", "implementation=" + impl, "-p", "fixture=" + str(data.resolve()), "-f", str(args.forks), "-wi", str(warmups), "-i", str(args.samples), "-rff", result, "-rf", "json", "-foe", "true"]
-                            with (dest / f"jmh-{impl}-{size}-{order}.log").open("w") as log:
-                                run(cmd, stdout=log, stderr=subprocess.STDOUT)
-                            results = json.loads(result.read_text())
-                            for phase, fork, sample, ns in jmh_samples(results, args.forks, args.samples):
-                                row = [language, impl, kind, size, order, phase, fork, sample, ns / size]
-                                writer.writerow(row)
-                                samples.append(row)
-                        else:
-                            # A process is a fork; warmups and measurements run inside it.
-                            cmd = native_command(language, impl, data) + [str(warmups), str(args.samples)]
-                            for fork in range(args.forks):
+                for seed in seeds:
+                    data = dest / f"{size}-{order}-{seed}.bin"
+                    fixture(data, size, order, seed)
+                    data.with_suffix(".sha256").write_text(
+                        hashlib.sha256(data.read_bytes()).hexdigest() + "\n")
+                    for fork in range(args.forks):
+                        jobs = [(lang, impl) for lang in languages for impl in IMPLS[lang]]
+                        schedule.shuffle(jobs)
+                        for language, impl in jobs:
+                            warmups = meta["warmups"][language]
+                            kind = "set" if impl.endswith("set") else "map"
+                            print(f"{language} {impl} {size} {order} seed={seed} fork={fork}",
+                                  flush=True)
+                            if language == "java":
+                                result = dest / f"jmh-{impl}-{size}-{order}-{seed}-{fork}.json"
+                                cmd = ["java", "-jar",
+                                       ROOT / "benchmarks/java/target/benchmarks.jar",
+                                       "bench.CollectionsBench.*", "-p", "implementation=" + impl,
+                                       "-p", "fixture=" + str(data.resolve()), "-f", "1", "-wi",
+                                       str(warmups), "-i", str(args.samples), "-rff", result, "-rf",
+                                       "json", "-foe", "true"]
+                                with result.with_suffix(".log").open("w") as log:
+                                    run(cmd, stdout=log, stderr=subprocess.STDOUT)
+                                measurements = [(phase, sample, ns) for phase, _, sample, ns in
+                                                jmh_samples(json.loads(result.read_text()), 1,
+                                                            args.samples)]
+                            else:
+                                cmd = native_command(language, impl, data) + [str(warmups),
+                                                                              str(args.samples)]
                                 result = run(cmd, capture_output=True, text=True)
                                 chunks = result.stdout.strip().split("\n\n")
                                 if len(chunks) != args.samples:
                                     raise ValueError("Unexpected native sample count")
-                                for sample, chunk in enumerate(chunks):
-                                    for phase, ns in parse_native(chunk).items():
-                                        row = [language, impl, kind, size, order, phase, fork, sample, ns / size]
-                                        writer.writerow(row)
-                                        samples.append(row)
-                        out.flush()
+                                measurements = [(phase, sample, ns) for sample, chunk in
+                                                enumerate(chunks) for phase, ns in
+                                                parse_native(chunk).items()]
+                            for phase, sample, ns in measurements:
+                                row = [language, impl, kind, size, order, seed, phase, fork, sample,
+                                       ns / size]
+                                writer.writerow(row)
+                                samples.append(row)
+                            out.flush()
     groups = {}
     for row in samples:
-        groups.setdefault(tuple(row[:6]), []).append(row[-1])
+        groups.setdefault(tuple(row[:7]), []).append(row[-1])
     with (dest / "summary.csv.tmp").open("w", newline="") as out:
         writer = csv.writer(out)
-        writer.writerow(header[:6] + ["median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
+        writer.writerow(
+            header[:7] + ["median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
         for key, values in groups.items():
-            writer.writerow([*key, statistics.median(values), min(values), max(values), len(values)])
+            writer.writerow(
+                [*key, statistics.median(values), min(values), max(values), len(values)])
     (dest / "summary.csv.tmp").replace(dest / "summary.csv")
     print(f"Results: {dest}")
 
@@ -209,20 +266,41 @@ def check(languages):
                 fixture(data, size, order)
                 for language in languages:
                     if language == "java":
-                        run(["java", "-cp", ROOT / "benchmarks/java/target/benchmarks.jar", "bench.CollectionsBench", data])
+                        run(["java", "-cp", ROOT / "benchmarks/java/target/benchmarks.jar",
+                             "bench.CollectionsBench", data])
                     else:
                         for impl in IMPLS[language]:
-                            result = run(native_command(language, impl, data) + ["0", "1"], capture_output=True, text=True)
+                            result = run(native_command(language, impl, data) + ["0", "1"],
+                                         capture_output=True, text=True)
                             parse_native(result.stdout.strip())
-    print("All selected implementations passed edge fixtures.")
+        for phase in range(3):
+            arrays = [[0, 2, 4] for _ in range(3)]
+            arrays[phase] = [2, 2, 2]
+            data.write_bytes(struct.pack("<Q9q", 3, *(key for keys in arrays for key in keys)))
+            for language in languages:
+                commands = [["java", "-cp", ROOT / "benchmarks/java/target/benchmarks.jar",
+                             "bench.CollectionsBench", data]] if language == "java" else [
+                    native_command(language, impl, data) + ["0", "1"] for impl in IMPLS[language]]
+                for command in commands:
+                    try:
+                        run(command, capture_output=True, text=True)
+                    except subprocess.CalledProcessError:
+                        continue
+                    raise ValueError(f"Runner accepted duplicate keys in fixture array {phase}: {command}")
+    print("All selected implementations passed edge fixtures and rejected duplicate keys.")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "test", "bench"))
     parser.add_argument("--languages", default=",".join(IMPLS))
-    parser.add_argument("--sizes", default="1000,100000,1000000")
-    parser.add_argument("--warmups", type=int, help="Override native (3) and Java (20) warmup counts")
+    parser.add_argument("--sizes", default="1000,10000,100000,300000,1000000")
+    parser.add_argument("--seeds", default="42,123,2026",
+                        help="Fixture seeds, kept separate in reports")
+    parser.add_argument("--schedule-seed", type=int, default=1729)
+    parser.add_argument("--cpu", type=int, help="Pin runners to an allowed CPU on Linux")
+    parser.add_argument("--warmups", type=int,
+                        help="Override native (3) and Java (20) warmup counts")
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--forks", type=int, default=2)
     parser.add_argument("--output")

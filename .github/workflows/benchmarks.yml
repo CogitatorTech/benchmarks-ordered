@@ -8,15 +8,20 @@ on:
         required: false
         default: '1000,100000'
         type: string
+      seeds:
+        description: 'Fixture seeds (comma-separated integers)'
+        required: false
+        default: '42,123,2026'
+        type: string
       samples:
         description: 'Measurement samples per fork'
         required: false
-        default: '3'
+        default: '5'
         type: string
       forks:
         description: 'Measurement forks'
         required: false
-        default: '1'
+        default: '3'
         type: string
       warmups:
         description: 'Warmup count (leave blank for runner defaults)'
@@ -56,16 +61,18 @@ jobs:
         run: nix develop --command make build
 
       - name: Run benchmarks
+        env:
+          BENCH_SIZES: ${{ inputs.sizes || '1000,100000' }}
+          BENCH_SEEDS: ${{ inputs.seeds || '42,123,2026' }}
+          BENCH_SAMPLES: ${{ inputs.samples || '5' }}
+          BENCH_FORKS: ${{ inputs.forks || '3' }}
+          BENCH_WARMUPS: ${{ inputs.warmups }}
         run: |
-          SIZES="${{ inputs.sizes || '1000,100000' }}"
-          SAMPLES="${{ inputs.samples || '3' }}"
-          FORKS="${{ inputs.forks || '1' }}"
-          WARMUPS="${{ inputs.warmups }}"
-          EXTRA_ARGS=""
-          if [ -n "$WARMUPS" ]; then
-            EXTRA_ARGS="--warmups $WARMUPS"
+          EXTRA_ARGS=()
+          if [ -n "$BENCH_WARMUPS" ]; then
+            EXTRA_ARGS=(--warmups "$BENCH_WARMUPS")
           fi
-          nix develop --command python3 scripts/bench.py bench --sizes "$SIZES" --samples "$SAMPLES" --forks "$FORKS" $EXTRA_ARGS
+          nix develop --command python3 scripts/bench.py bench --sizes "$BENCH_SIZES" --seeds "$BENCH_SEEDS" --samples "$BENCH_SAMPLES" --forks "$BENCH_FORKS" "${EXTRA_ARGS[@]}"
 
       - name: Build GitHub Pages site
         run: nix develop --command make site

@@ -5,12 +5,22 @@
 
 #ifdef BENCH_SET
 typedef int64_t Item;
-static Item item(int64_t key, int64_t value) { (void)value; return key; }
+static Item item(int64_t key, int64_t value) {
+    (void) value;
+    return key;
+}
 static int64_t key_of(Item entry) { return entry; }
 static int64_t value_of(Item entry) { return entry; }
 #else
-typedef struct { int64_t key, value; } Item;
-static Item item(int64_t key, int64_t value) { Item entry = {key, value}; return entry; }
+typedef struct {
+    int64_t key, value;
+} Item;
+
+static Item item(int64_t key, int64_t value) {
+    Item entry = {key, value};
+    return entry;
+}
+
 static int64_t key_of(Item entry) { return entry.key; }
 static int64_t value_of(Item entry) { return entry.value; }
 #endif
@@ -18,22 +28,22 @@ static int64_t value_of(Item entry) { return entry.value; }
 #define compare(a, b) ((key_of(a) > key_of(b)) - (key_of(a) < key_of(b)))
 KBTREE_INIT(items, Item, compare)
 
-static void kb_put_entry(kbtree_t(items) *tree, int64_t key, int64_t value) {
+static void kb_put_entry(kbtree_t(items) * tree, int64_t key, int64_t value) {
     Item entry = item(key, value);
     Item *existing = kb_get(items, tree, entry);
     if (existing) *existing = entry;
     else kb_put(items, tree, entry);
 }
 
-static int kb_remove_entry(kbtree_t(items) *tree, int64_t key) {
+static int kb_remove_entry(kbtree_t(items) * tree, int64_t key) {
     Item entry = item(key, 0);
     if (!kb_get(items, tree, entry)) return 0;
-    (void)kb_del(items, tree, entry);
+    (void) kb_del(items, tree, entry);
     return 1;
 }
 
-static void kb_validate_tree(kbtree_t(items) *tree, const Dataset *data) {
-    CHECK((size_t)kb_size(tree) == data->n);
+static void kb_validate_tree(kbtree_t(items) * tree, const Dataset * data) {
+    CHECK((size_t) kb_size(tree) == data->n);
     kbitr_t it;
     size_t index = 0;
     if (data->n) {
@@ -49,7 +59,7 @@ static void kb_validate_tree(kbtree_t(items) *tree, const Dataset *data) {
     CHECK(index == data->n);
 }
 
-static void kb_reset_tree(kbtree_t(items) **tree, const Dataset *data) {
+static void kb_reset_tree(kbtree_t(items) * *tree, const Dataset * data) {
     kb_destroy(items, (*tree));
     *tree = kb_init(items, 512);
     CHECK(*tree != NULL);
@@ -59,7 +69,7 @@ static void kb_reset_tree(kbtree_t(items) **tree, const Dataset *data) {
 
 static void measure_kbtree(const Dataset *data, int emit) {
     uint64_t times[5], start = now_ns();
-    kbtree_t(items) *tree = kb_init(items, 512);
+    kbtree_t(items) * tree = kb_init(items, 512);
     CHECK(tree != NULL);
     for (size_t i = 0; i < data->n; ++i) kb_put_entry(tree, data->insert[i], data->insert[i] + 1);
     times[0] = now_ns() - start;
@@ -69,7 +79,7 @@ static void measure_kbtree(const Dataset *data, int emit) {
         kb_put_entry(tree, 0, -1);
         CHECK(value_of(*kb_get(items, tree, item(0, 0))) == value_of(item(0, -1)));
         kb_put_entry(tree, 0, 1);
-        CHECK((size_t)kb_size(tree) == data->n);
+        CHECK((size_t) kb_size(tree) == data->n);
     }
     CHECK(!kb_remove_entry(tree, -1));
     uint64_t expected = 0;
@@ -125,13 +135,14 @@ struct KavlNode {
 };
 
 #define kavl_node_cmp(p, q) (((q)->key < (p)->key) - ((p)->key < (q)->key))
+
 KAVL_INIT(avl, struct KavlNode, head, kavl_node_cmp)
 
 static void kavl_put_entry(struct KavlNode **root, int64_t key, int64_t value) {
 #ifdef BENCH_SET
-    (void)value;
+    (void) value;
 #endif
-    struct KavlNode *p = (struct KavlNode *)malloc(sizeof(*p));
+    struct KavlNode *p = (struct KavlNode *) malloc(sizeof(*p));
     CHECK(p != NULL);
     p->key = key;
 #ifndef BENCH_SET
@@ -164,10 +175,11 @@ static int kavl_remove_entry(struct KavlNode **root, int64_t key) {
 }
 
 static void kavl_validate_tree(struct KavlNode *root, const Dataset *data) {
-    CHECK((size_t)kavl_size(head, root) == data->n);
+    CHECK((size_t) kavl_size(head, root) == data->n);
     size_t index = 0;
     if (data->n) {
-        kavl_itr_t(avl) it;
+        kavl_itr_t(avl)
+        it;
         kavl_itr_first(avl, root, &it);
         const struct KavlNode *p;
         while ((p = kavl_at(&it)) != NULL) {
@@ -203,7 +215,7 @@ static void measure_kavl(const Dataset *data, int emit) {
         CHECK(check_node->value == -1);
 #endif
         kavl_put_entry(&root, 0, 1);
-        CHECK((size_t)kavl_size(head, root) == data->n);
+        CHECK((size_t) kavl_size(head, root) == data->n);
     }
     CHECK(!kavl_remove_entry(&root, -1));
     uint64_t expected = 0;
@@ -233,7 +245,8 @@ static void measure_kavl(const Dataset *data, int emit) {
     kavl_reset_tree(&root, data);
     start = now_ns();
     if (data->n) {
-        kavl_itr_t(avl) it;
+        kavl_itr_t(avl)
+        it;
         kavl_itr_first(avl, root, &it);
         const struct KavlNode *p;
         while ((p = kavl_at(&it)) != NULL) {
@@ -258,9 +271,9 @@ static void measure_kavl(const Dataset *data, int emit) {
 }
 
 static int btree_compare_items(const void *a, const void *b, void *udata) {
-    (void)udata;
-    const Item *ia = (const Item *)a;
-    const Item *ib = (const Item *)b;
+    (void) udata;
+    const Item *ia = (const Item *) a;
+    const Item *ib = (const Item *) b;
     return (key_of(*ia) > key_of(*ib)) - (key_of(*ia) < key_of(*ib));
 }
 
@@ -271,7 +284,7 @@ static void btree_put_entry(struct btree *tree, int64_t key, int64_t value) {
 
 static const Item *btree_get_entry(const struct btree *tree, int64_t key) {
     Item target = item(key, 0);
-    return (const Item *)btree_get(tree, &target);
+    return (const Item *) btree_get(tree, &target);
 }
 
 static int btree_remove_entry(struct btree *tree, int64_t key) {
@@ -284,8 +297,8 @@ struct BtreeValidateCtx {
 };
 
 static bool btree_validate_cb(const void *item_ptr, void *udata) {
-    struct BtreeValidateCtx *ctx = (struct BtreeValidateCtx *)udata;
-    const Item *entry = (const Item *)item_ptr;
+    struct BtreeValidateCtx *ctx = (struct BtreeValidateCtx *) udata;
+    const Item *entry = (const Item *) item_ptr;
     CHECK(key_of(*entry) == (int64_t)(ctx->index * 2));
     CHECK(value_of(*entry) == value_of(item((int64_t)(ctx->index * 2), (int64_t)(ctx->index * 2 + 1))));
     ctx->index++;
@@ -294,7 +307,7 @@ static bool btree_validate_cb(const void *item_ptr, void *udata) {
 
 static void btree_validate_tree(const struct btree *tree, const Dataset *data) {
     CHECK(btree_count(tree) == data->n);
-    struct BtreeValidateCtx ctx = { 0 };
+    struct BtreeValidateCtx ctx = {0};
     if (data->n) {
         btree_ascend(tree, NULL, btree_validate_cb, &ctx);
     }
@@ -314,8 +327,8 @@ struct BtreeSumCtx {
 };
 
 static bool btree_sum_cb(const void *item_ptr, void *udata) {
-    struct BtreeSumCtx *ctx = (struct BtreeSumCtx *)udata;
-    const Item *entry = (const Item *)item_ptr;
+    struct BtreeSumCtx *ctx = (struct BtreeSumCtx *) udata;
+    const Item *entry = (const Item *) item_ptr;
 #ifdef BENCH_SET
     ctx->sum += key_of(*entry);
 #else
@@ -362,7 +375,7 @@ static void measure_btree(const Dataset *data, int emit) {
     for (size_t i = 0; i < data->n; ++i) sum += btree_get_entry(tree, data->lookup[i] + 1) != NULL;
     times[2] = now_ns() - start;
     CHECK(sum == 0);
-    struct BtreeSumCtx ctx = { 0 };
+    struct BtreeSumCtx ctx = {0};
     btree_reset_tree(&tree, data);
     start = now_ns();
     if (data->n) {
