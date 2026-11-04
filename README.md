@@ -8,6 +8,8 @@
 
 Benchmarks to compare sorted maps and sets implemented in the Ordered Zig library with similar implementations in Rust, C, C++, and Java.
 
+**You can see the latest benchmark results [here](https://cogitatortech.github.io/benchmarks-ordered/).**
+
 ### Implementations
 
 | Language | Sorted Maps                                                                              | Sorted Sets                                                              |

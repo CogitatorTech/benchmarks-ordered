@@ -65,7 +65,7 @@ fn check(ok: bool) !void {
     if (!ok) return error.BenchmarkMismatch;
 }
 fn now() i96 {
-    return std.Io.Timestamp.now(std.Options.debug_io, .real).nanoseconds;
+    return std.Io.Timestamp.now(std.Options.debug_io, .awake).nanoseconds;
 }
 fn isSet(comptime T: type) bool {
     return T == Sorted or T == RedBlack or T == Treap(true);
@@ -132,10 +132,10 @@ fn reset(comptime T: type, collection: *T, keys: []const i64, n: usize) !void {
 }
 
 fn measure(comptime T: type, keys: []const i64, n: usize, emit: bool) !void {
-    var collection = if (T == SkipList) try T.init(allocator) else T.init(allocator);
-    defer collection.deinit();
     var times: [5]u64 = undefined;
     var start = now();
+    var collection = if (T == SkipList) try T.init(allocator) else T.init(allocator);
+    defer collection.deinit();
     for (keys[0..n]) |key| try put(T, &collection, key, key + 1);
     times[0] = @intCast(now() - start);
     try check(collection.count() == n);

@@ -45,6 +45,7 @@ STRUCTURE_MAP = {
 }
 
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
+DOWNLOADS = ("summary.csv", "samples.csv", "metadata.json", "flake.lock")
 
 
 def find_latest_results(base_dir=None):
@@ -55,10 +56,10 @@ def find_latest_results(base_dir=None):
         d
         for d in results_dir.iterdir()
         if d.is_dir()
-        and ((d / "summary.csv").exists() or (d / "samples.csv").exists())
+        and (d / "summary.csv").is_file()
     ]
     if not candidates:
-        raise FileNotFoundError(f"No benchmark results found in {results_dir}")
+        raise FileNotFoundError(f"No completed benchmark results found in {results_dir}")
     return max(candidates, key=lambda d: d.name)
 
 
@@ -81,6 +82,7 @@ def load_records(result_dir):
                     "max_ns_per_op": float(r["max_ns_per_op"]),
                     "samples": int(r["samples"]),
                 })
+            validate_records(records)
             return records
 
     samples_path = result_dir / "samples.csv"
@@ -115,7 +117,24 @@ def load_records(result_dir):
             "max_ns_per_op": max(values),
             "samples": len(values),
         })
+    validate_records(records)
     return records
+
+
+def validate_records(records):
+    if not records:
+        raise ValueError("Benchmark results are empty")
+    groups = {}
+    for record in records:
+        key = tuple(record[field] for field in ("language", "implementation", "kind", "size", "order"))
+        phases = groups.setdefault(key, {})
+        phase = record["phase"]
+        if phase not in PHASES or phase in phases or record["samples"] < 1:
+            raise ValueError(f"Invalid benchmark phase or sample count: {key}")
+        phases[phase] = record["samples"]
+    for key, phases in groups.items():
+        if set(phases) != set(PHASES) or len(set(phases.values())) != 1:
+            raise ValueError(f"Incomplete benchmark phases or unequal sample counts: {key}")
 
 
 def load_metadata(result_dir):
@@ -208,8 +227,10 @@ def format_html_metric(val, best_val):
 
 
 def render_chart_code(title, x_labels, values, y_label="Time (ns/op)"):
-    if not x_labels or not values:
+    points = [(label, value) for label, value in zip(x_labels, values) if value is not None]
+    if not points:
         return ""
+    x_labels, values = zip(*points)
     max_val = max(values)
     upper_bound = math.ceil(max_val * 1.15) if max_val > 0 else 10
     if upper_bound == 0:
@@ -328,8 +349,8 @@ def generate_report(records, metadata):
                 )
 
                 chart_labels.append(short_label)
-                chart_hit_values.append(phases.get("hit", 0.0))
-                chart_iter_values.append(phases.get("iterate", 0.0))
+                chart_hit_values.append(phases.get("hit"))
+                chart_iter_values.append(phases.get("iterate"))
 
             lines.append("\n".join(table_rows))
             lines.append("")
@@ -414,7 +435,7 @@ def render_html_interpretation_guide():
   </section>"""
 
 
-def generate_html_report(records, metadata):
+def generate_html_report(records, metadata, downloads=()):
     combos = sorted({(r["size"], r["order"]) for r in records})
 
     nav_links = [
@@ -560,9 +581,8 @@ def generate_html_report(records, metadata):
         "      <p>This report provides structured comparison tables and visual charts generated from benchmark results.</p>",
         '      <div class="btn-group">',
         '        <a class="btn" href="REPORT.md" download>Download REPORT.md</a>',
-        '        <a class="btn" href="summary.csv" download>Download summary.csv</a>',
-        '        <a class="btn" href="samples.csv" download>Download samples.csv</a>',
-        '        <a class="btn" href="metadata.json" download>Download metadata.json</a>',
+        *(f'        <a class="btn" href="{filename}" download>Download {filename}</a>'
+          for filename in DOWNLOADS if filename in downloads),
         "      </div>",
         '      <div class="btn-group">',
         *nav_links,
@@ -661,8 +681,8 @@ def generate_html_report(records, metadata):
                 )
 
                 chart_labels.append(short_label)
-                chart_hit_values.append(phases.get("hit", 0.0))
-                chart_iter_values.append(phases.get("iterate", 0.0))
+                chart_hit_values.append(phases.get("hit"))
+                chart_iter_values.append(phases.get("iterate"))
 
             table_rows.extend([
                 "            </tbody>",
@@ -714,16 +734,18 @@ def build_site(results_dir, site_dir):
     metadata = load_metadata(results_dir)
 
     report_md = generate_report(records, metadata)
-    report_html = generate_html_report(records, metadata)
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
 
     (site_dir / "index.html").write_text(report_html, encoding="utf-8")
     (site_dir / "REPORT.md").write_text(report_md, encoding="utf-8")
     (site_dir / ".nojekyll").write_text("", encoding="utf-8")
 
-    for filename in ("summary.csv", "samples.csv", "metadata.json", "flake.lock"):
+    for filename in DOWNLOADS:
         src = results_dir / filename
-        if src.exists():
+        if src.is_file():
             shutil.copyfile(src, site_dir / filename)
+        else:
+            (site_dir / filename).unlink(missing_ok=True)
 
 
 def main():
@@ -765,7 +787,7 @@ def main():
     in_dir_report.write_text(report_md, encoding="utf-8")
     print(f"Copy written to: {in_dir_report}")
 
-    report_html = generate_html_report(records, metadata)
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
     in_dir_html = results_dir / "index.html"
     in_dir_html.write_text(report_html, encoding="utf-8")
     print(f"Copy written to: {in_dir_html}")

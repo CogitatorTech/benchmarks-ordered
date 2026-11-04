@@ -58,9 +58,9 @@ static void kb_reset_tree(kbtree_t(items) **tree, const Dataset *data) {
 }
 
 static void measure_kbtree(const Dataset *data, int emit) {
+    uint64_t times[5], start = now_ns();
     kbtree_t(items) *tree = kb_init(items, 512);
     CHECK(tree != NULL);
-    uint64_t times[5], start = now_ns();
     for (size_t i = 0; i < data->n; ++i) kb_put_entry(tree, data->insert[i], data->insert[i] + 1);
     times[0] = now_ns() - start;
     kb_validate_tree(tree, data);
@@ -325,9 +325,9 @@ static bool btree_sum_cb(const void *item_ptr, void *udata) {
 }
 
 static void measure_btree(const Dataset *data, int emit) {
+    uint64_t times[5], start = now_ns();
     struct btree *tree = btree_new(sizeof(Item), 0, btree_compare_items, NULL);
     CHECK(tree != NULL);
-    uint64_t times[5], start = now_ns();
     for (size_t i = 0; i < data->n; ++i) btree_put_entry(tree, data->insert[i], data->insert[i] + 1);
     times[0] = now_ns() - start;
     btree_validate_tree(tree, data);
