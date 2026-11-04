@@ -538,19 +538,19 @@ def render_html_interpretation_guide():
     <h2>Performance Interpretation Guide</h2>
     <p>Ascending and shuffled describe insertion order only. Lookup and removal use independent shuffled permutations. Containers are populated and validated before read and removal phases, so these measure recently accessed data. CI timings are exploratory; publish comparisons from a dedicated idle machine with recorded CPU affinity. This benchmark isolates five phases of sorted container operations:</p>
     <ul>
-      <li>Insert: Time to insert <em>N</em> keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
-      <li>Lookup hit: Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
-      <li>Lookup miss: Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
-      <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
-      <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
+      <li><strong>Insert</strong>: Time to insert <em>N</em> keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
+      <li><strong>Lookup hit</strong>: Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
+      <li><strong>Lookup miss</strong>: Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
+      <li><strong>Iterate</strong>: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
+      <li><strong>Remove</strong>: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
     </ul>
     <p><strong class="best">Bold green</strong> values mark the lowest measured median, and <strong class="runner-up">light orange</strong> values mark the next two lowest medians, not proven winners.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
-      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
-      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.</li>
-      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
-      <li>Java boxed collections versus primitive specialization: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.</li>
+      <li><strong>B-trees versus binary trees</strong>: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
+      <li><strong>Intrusive and dedicated AVL trees</strong>: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.</li>
+      <li><strong>Flat arrays</strong>: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
+      <li><strong>Java boxed collections versus primitive specialization</strong>: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.</li>
     </ol>
   </section>"""
 
