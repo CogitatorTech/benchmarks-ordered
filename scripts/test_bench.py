@@ -1,5 +1,6 @@
 import csv
 import copy
+import json
 from pathlib import Path
 import struct
 import tempfile
@@ -53,6 +54,25 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(len(records), 40)
             self.assertEqual({r["seed"] for r in records}, {42, 123})
             self.assertTrue(all(r["forks"] == 3 for r in records))
+
+    def test_java_rounds_keep_global_fork_ids(self):
+        results = [{"benchmark": "bench.CollectionsBench." + phase,
+                    "primaryMetric": {"scoreUnit": "ns/op", "rawData": [[10, 20]]}}
+                   for phase in bench.PHASES]
+        def fake_run(command, **kwargs):
+            self.assertEqual(command[command.index("-f") + 1], "1")
+            Path(command[command.index("-rff") + 1]).write_text(json.dumps(results))
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(sizes="2", output=str(Path(directory) / "results"),
+                                   warmups=1, samples=2, forks=2, seeds="42", cpu=None, schedule_seed=1729)
+            with patch.object(bench, "require_env"), patch.object(bench, "metadata", return_value={}), \
+                 patch.object(bench, "IMPLS", {"java": ["tree_map"]}), \
+                 patch.object(bench, "run", side_effect=fake_run):
+                bench.bench(args, ["java"])
+            import report
+            rows = report.load_records(Path(args.output))
+            self.assertTrue(all(r["samples"] == 4 and r["forks"] == 2 for r in rows))
+            self.assertEqual(len(list(Path(args.output).glob("jmh-*.json"))), 4)
 
     def test_empty_fixture(self):
         with tempfile.TemporaryDirectory() as directory:

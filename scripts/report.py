@@ -260,14 +260,14 @@ Bold values mark the lowest measured median, not a proven winner. Cells show sam
 
 ### Key Architectural Comparisons
 
-1. B-trees versus binary trees: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
-2. Intrusive and dedicated AVL trees: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.
-3. Flat arrays: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
+1. B-trees versus binary trees: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
+2. Intrusive and dedicated AVL trees: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.
+3. Flat arrays: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
 4. Java boxed collections versus primitive specialization: Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.
 """
 
 
-def format_metric(val, best_val):
+def format_metric(val, best_val, runner_up_vals=None):
     if val is None:
         return "-"
     formatted = f"{val:.2f}"
@@ -276,12 +276,14 @@ def format_metric(val, best_val):
     return formatted
 
 
-def format_html_metric(val, best_val):
+def format_html_metric(val, best_val, runner_up_vals=None):
     if val is None:
         return "-"
     formatted = f"{val:.2f}"
     if best_val is not None and val == best_val:
         return f'<strong class="best">{formatted}</strong>'
+    if runner_up_vals is not None and val in runner_up_vals:
+        return f'<span class="runner-up">{formatted}</span>'
     return formatted
 
 
@@ -506,9 +508,9 @@ def render_html_interpretation_guide():
     <p>Bold green values mark the lowest measured median, not a proven winner. Cells show sample IQR, sample counts, fork counts, and fork medians. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
-      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
-      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.</li>
-      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
+      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
+      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.</li>
+      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
       <li>Java boxed collections versus primitive specialization: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.</li>
     </ol>
   </section>"""
