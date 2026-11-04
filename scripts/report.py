@@ -533,7 +533,7 @@ def render_html_interpretation_guide():
       <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
       <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
     </ul>
-    <p>Bold green values mark the lowest measured median, and light orange values mark the next two lowest medians, not proven winners.</p>
+    <p><strong class="best">Bold green</strong> values mark the lowest measured median, and <strong class="runner-up">light orange</strong> values mark the next two lowest medians, not proven winners.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
       <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
@@ -710,6 +710,9 @@ def generate_html_report(records, metadata, downloads=()):
         "      background: var(--runner-up-bg);",
         "      padding: 0.15rem 0.35rem;",
         "      border-radius: 4px;",
+        "    }",
+        "    strong.runner-up {",
+        "      font-weight: 700;",
         "    }",
         "    .chart-card {",
         "      background: var(--card-bg);",

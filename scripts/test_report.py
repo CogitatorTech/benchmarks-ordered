@@ -357,6 +357,8 @@ class ReportTests(unittest.TestCase):
         self.assertIn('<td class="num"><span class="runner-up">35.00</span></td>', output)
         self.assertIn('<strong class="best">15.00</strong>', output)
         self.assertIn('<td class="num"><span class="runner-up">30.00</span></td>', output)
+        self.assertIn('<strong class="best">Bold green</strong>', output)
+        self.assertIn('<strong class="runner-up">light orange</strong>', output)
         self.assertIn("xychart-beta", output)
         self.assertIn('<table class="sortable">', output)
         self.assertIn("table.sortable th", output)
