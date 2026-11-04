@@ -187,24 +187,20 @@ def render_interpretation_guide():
     return """## Performance Interpretation Guide
 
 This benchmark isolates five fundamental phases of sorted container operations:
-- **Insert**: Time to insert $N$ keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
-- **Lookup Hit**: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
-- **Lookup Miss**: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
-- **Iterate**: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (e.g. flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
-- **Remove**: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time.
+- Insert: Time to insert $N$ keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
+- Lookup hit: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
+- Lookup miss: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
+- Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
+- Remove: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time.
 
-The lowest latency value for each operation column in the tables below is displayed in **bold**.
+The lowest latency value for each operation column in the tables below is displayed in bold.
 
 ### Key Architectural Comparisons
 
-1. **B-Trees versus Binary Trees**:
-   B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
-2. **Intrusive and Dedicated AVL Trees**:
-   Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.
-3. **Flat Arrays**:
-   Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
-4. **Java Boxed Collections versus Primitive Specialization**:
-   Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), demonstrating the true algorithmic capacity of the JVM without object wrappers.
+1. B-trees versus binary trees: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
+2. Intrusive and dedicated AVL trees: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.
+3. Flat arrays: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
+4. Java boxed collections versus primitive specialization: Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), demonstrating the true algorithmic capacity of the JVM without object wrappers.
 """
 
 
@@ -418,19 +414,19 @@ def render_html_interpretation_guide():
     <h2>Performance Interpretation Guide</h2>
     <p>This benchmark isolates five fundamental phases of sorted container operations:</p>
     <ul>
-      <li><strong>Insert:</strong> Time to insert <em>N</em> keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
-      <li><strong>Lookup Hit:</strong> Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
-      <li><strong>Lookup Miss:</strong> Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
-      <li><strong>Iterate:</strong> Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (e.g. flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
-      <li><strong>Remove:</strong> Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time.</li>
+      <li>Insert: Time to insert <em>N</em> keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
+      <li>Lookup hit: Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
+      <li>Lookup miss: Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
+      <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
+      <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time.</li>
     </ul>
-    <p>The lowest latency value for each operation column in the tables below is displayed in <strong>bold with a green highlight</strong>.</p>
+    <p>The lowest latency value for each operation column in the tables below is displayed with bold text and a green highlight.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
-      <li><strong>B-Trees versus Binary Trees:</strong> B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
-      <li><strong>Intrusive and Dedicated AVL Trees:</strong> Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.</li>
-      <li><strong>Flat Arrays:</strong> Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
-      <li><strong>Java Boxed Collections versus Primitive Specialization:</strong> Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), demonstrating the true algorithmic capacity of the JVM without object wrappers.</li>
+      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
+      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.</li>
+      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
+      <li>Java boxed collections versus primitive specialization: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), demonstrating the true algorithmic capacity of the JVM without object wrappers.</li>
     </ol>
   </section>"""
 
@@ -541,6 +537,36 @@ def generate_html_report(records, metadata, downloads=()):
         "      font-variant-numeric: tabular-nums;",
         "      font-family: var(--font-mono);",
         "    }",
+        "    table.sortable th {",
+        "      cursor: pointer;",
+        "      user-select: none;",
+        "      position: relative;",
+        "      padding-right: 1.5rem;",
+        "    }",
+        "    table.sortable th:hover {",
+        "      background: var(--border);",
+        "    }",
+        "    table.sortable th:focus-visible {",
+        "      outline: 2px solid var(--accent);",
+        "      outline-offset: -2px;",
+        "    }",
+        "    table.sortable th::after {",
+        '      content: "↕";',
+        "      position: absolute;",
+        "      right: 0.5rem;",
+        "      opacity: 0.4;",
+        "      font-size: 0.75rem;",
+        "    }",
+        '    table.sortable th[aria-sort="ascending"]::after {',
+        '      content: "▲";',
+        "      opacity: 1;",
+        "      color: var(--accent);",
+        "    }",
+        '    table.sortable th[aria-sort="descending"]::after {',
+        '      content: "▼";',
+        "      opacity: 1;",
+        "      color: var(--accent);",
+        "    }",
         "    .best {",
         "      font-weight: 700;",
         "      color: var(--best-color);",
@@ -636,7 +662,7 @@ def generate_html_report(records, metadata, downloads=()):
 
             table_rows = [
                 '        <div class="table-container">',
-                "          <table>",
+                '          <table class="sortable">',
                 "            <thead>",
                 "              <tr>",
                 "                <th>Language</th>",
@@ -705,6 +731,46 @@ def generate_html_report(records, metadata, downloads=()):
         "      <p>Ordered Benchmarks Suite</p>",
         "    </footer>",
         "  </div>",
+        "  <script>",
+        "    document.querySelectorAll('table.sortable').forEach((table) => {",
+        "      const headers = table.querySelectorAll('thead th');",
+        "      const tbody = table.querySelector('tbody');",
+        "      if (!tbody) return;",
+        "      headers.forEach((th, colIndex) => {",
+        "        th.setAttribute('tabindex', '0');",
+        "        th.setAttribute('role', 'button');",
+        "        th.setAttribute('aria-sort', 'none');",
+        "        const sortColumn = () => {",
+        "          const currentSort = th.getAttribute('aria-sort');",
+        "          const nextSort = currentSort === 'ascending' ? 'descending' : 'ascending';",
+        "          headers.forEach((h) => h.setAttribute('aria-sort', 'none'));",
+        "          th.setAttribute('aria-sort', nextSort);",
+        "          const isNum = th.classList.contains('num');",
+        "          const rows = Array.from(tbody.querySelectorAll('tr'));",
+        "          rows.sort((rowA, rowB) => {",
+        "            const cellA = rowA.cells[colIndex]?.textContent.trim() ?? '';",
+        "            const cellB = rowB.cells[colIndex]?.textContent.trim() ?? '';",
+        "            if (isNum) {",
+        "              const numA = cellA === '-' || cellA === '' ? Infinity : parseFloat(cellA.replace(/,/g, ''));",
+        "              const numB = cellB === '-' || cellB === '' ? Infinity : parseFloat(cellB.replace(/,/g, ''));",
+        "              const diff = (isNaN(numA) ? Infinity : numA) - (isNaN(numB) ? Infinity : numB);",
+        "              return nextSort === 'ascending' ? diff : -diff;",
+        "            }",
+        "            const comp = cellA.localeCompare(cellB, undefined, { numeric: true, sensitivity: 'base' });",
+        "            return nextSort === 'ascending' ? comp : -comp;",
+        "          });",
+        "          rows.forEach((row) => tbody.appendChild(row));",
+        "        };",
+        "        th.addEventListener('click', sortColumn);",
+        "        th.addEventListener('keydown', (e) => {",
+        "          if (e.key === 'Enter' || e.key === ' ') {",
+        "            e.preventDefault();",
+        "            sortColumn();",
+        "          }",
+        "        });",
+        "      });",
+        "    });",
+        "  </script>",
         '  <script type="module">',
         "    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';",
         "    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;",

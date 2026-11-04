@@ -176,10 +176,10 @@ class ReportTests(unittest.TestCase):
         self.assertIn("# Benchmark Report: Sorted Maps and Sets", output)
         self.assertIn("Test CPU", output)
         self.assertIn("Ordered BTreeMap", output)
-        # Best insert (20.00) is bold, worse insert (35.00) is not bold
+        # The best insert score (20.00) is bold; the slower insert score (35.00) is not bold.
         self.assertIn("**20.00**", output)
         self.assertIn("| 35.00 |", output)
-        # Best hit (15.00) is bold, worse hit (30.00) is not bold
+        # The best hit score (15.00) is bold; the slower hit score (30.00) is not bold.
         self.assertIn("**15.00**", output)
         self.assertIn("| 30.00 |", output)
         self.assertNotIn("Sorted Iteration Latency", output)
@@ -256,6 +256,9 @@ class ReportTests(unittest.TestCase):
         self.assertIn('<strong class="best">15.00</strong>', output)
         self.assertIn('<td class="num">30.00</td>', output)
         self.assertIn("xychart-beta", output)
+        self.assertIn('<table class="sortable">', output)
+        self.assertIn("table.sortable th", output)
+        self.assertIn("aria-sort", output)
         self.assertNotIn("Sorted Iteration Latency", output)
         self.assertNotIn("bar [0.00", output)
         self.assertNotIn('href="samples.csv"', output)

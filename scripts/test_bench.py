@@ -63,7 +63,7 @@ class HarnessTests(unittest.TestCase):
             for impl in impls:
                 self.assertTrue(
                     impl.endswith("_map") or impl.endswith("_set"),
-                    f"{impl} must end with _map or _set",
+                    f"The implementation name '{impl}' must end with '_map' or '_set'.",
                 )
 
     def test_summary_is_published_only_after_success(self):

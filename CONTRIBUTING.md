@@ -54,4 +54,4 @@ already been resolved.
 
 ### Code of Conduct
 
-We adhere to the project's [Code of Conduct](CODE_OF_CONDUCT.md).
+We adhere to the project [Code of Conduct](CODE_OF_CONDUCT.md).
