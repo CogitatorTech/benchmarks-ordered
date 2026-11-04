@@ -110,6 +110,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("xychart-beta", chart)
         self.assertIn('"A", "B"', chart)
         self.assertIn("10.50, 20.20", chart)
+        self.assertIn("labelRotation", chart)
 
     def test_generate_report(self):
         records = [

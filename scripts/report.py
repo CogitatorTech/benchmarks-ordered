@@ -218,7 +218,8 @@ def render_chart_code(title, x_labels, values, y_label="Time (ns/op)"):
     labels_str = ", ".join(f'"{lbl}"' for lbl in x_labels)
     values_str = ", ".join(f"{v:.2f}" for v in values)
 
-    return f"""xychart-beta
+    return f"""%%{{init: {{"xyChart": {{"width": 900, "height": 500, "xAxis": {{"labelRotation": 45}}}}}}}}%%
+xychart-beta
     title "{title}"
     x-axis [{labels_str}]
     y-axis "{y_label}" 0 --> {upper_bound}
@@ -689,7 +690,14 @@ def generate_html_report(records, metadata):
         "    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;",
         "    mermaid.initialize({",
         "      startOnLoad: true,",
-        "      theme: isDark ? 'dark' : 'neutral'",
+        "      theme: isDark ? 'dark' : 'neutral',",
+        "      xyChart: {",
+        "        width: 900,",
+        "        height: 500,",
+        "        xAxis: {",
+        "          labelRotation: 45",
+        "        }",
+        "      }",
         "    });",
         "  </script>",
         "</body>",
