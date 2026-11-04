@@ -140,13 +140,18 @@ class ReportTests(unittest.TestCase):
                     runner_environment="GitHub-hosted CI")
         markdown = report.generate_report(records, meta)
         output = report.generate_html_report(records, meta)
+        self.assertEqual(report.spread_text(records[0]), "IQR 1.50–2.50; 4 samples; 2 forks; fork medians [1.50, 2.50]")
         for content in (markdown, output):
-            self.assertIn("IQR 1.50–2.50; 4 samples; 2 forks", content)
-            self.assertIn("fork medians [1.50, 2.50]", content)
+            self.assertNotIn("IQR ", content)
+            self.assertNotIn("fork medians", content)
+            self.assertNotIn("Latency by Dataset Size", content)
             self.assertIn("GitHub-hosted CI", content)
             self.assertIn("/local/ordered", content)
-            self.assertIn("line [2.00, 2.00]", content)
             self.assertIn("Seed 123", content)
+        scaling_md = report.scaling_charts(records)
+        scaling_html = report.scaling_charts(records, as_html=True)
+        for content in (scaling_md, scaling_html):
+            self.assertIn("line [2.00, 2.00]", content)
             for phase in report.PHASES:
                 self.assertIn(phase.title() + " Scaling", content)
         for name in ("phase", "kind", "order"):

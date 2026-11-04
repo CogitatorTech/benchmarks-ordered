@@ -272,7 +272,7 @@ Ascending and shuffled describe insertion order only. Lookup and removal use ind
 - **Iterate**: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
 - **Remove**: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.
 
-Bold values mark the lowest measured median, not a proven winner. Cells show sample IQR and fork medians when raw data is available. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.
+Bold values mark the lowest measured median, not a proven winner.
 
 ### Architectural Comparisons
 
@@ -387,10 +387,6 @@ def generate_report(records, metadata):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
-            details = {
-                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
-                    spread_text(r)) + "</small>"
-                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
@@ -424,20 +420,15 @@ def generate_report(records, metadata):
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
                 insert_str = format_metric(phases.get("insert"), best_by_phase.get("insert"),
-                                           runners_up_by_phase.get("insert")) + details.get(
-                    (lang, impl, "insert"), "")
+                                           runners_up_by_phase.get("insert"))
                 hit_str = format_metric(phases.get("hit"), best_by_phase.get("hit"),
-                                        runners_up_by_phase.get("hit")) + details.get(
-                    (lang, impl, "hit"), "")
+                                        runners_up_by_phase.get("hit"))
                 miss_str = format_metric(phases.get("miss"), best_by_phase.get("miss"),
-                                         runners_up_by_phase.get("miss")) + details.get(
-                    (lang, impl, "miss"), "")
+                                         runners_up_by_phase.get("miss"))
                 iter_str = format_metric(phases.get("iterate"), best_by_phase.get("iterate"),
-                                         runners_up_by_phase.get("iterate")) + details.get(
-                    (lang, impl, "iterate"), "")
+                                         runners_up_by_phase.get("iterate"))
                 remove_str = format_metric(phases.get("remove"), best_by_phase.get("remove"),
-                                           runners_up_by_phase.get("remove")) + details.get(
-                    (lang, impl, "remove"), "")
+                                           runners_up_by_phase.get("remove"))
 
                 table_rows.append(
                     f"| {lang} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"
@@ -454,9 +445,6 @@ def generate_report(records, metadata):
                 chart = render_chart(title, chart_labels, values)
                 lines.append(chart)
 
-    lines.extend(["## Latency by Dataset Size", "",
-                  "The x-axis shows element counts with equal spacing between measured sizes.", "",
-                  scaling_charts(records)])
     return "\n".join(lines)
 
 
@@ -545,7 +533,7 @@ def render_html_interpretation_guide():
       <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
       <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
     </ul>
-    <p>Bold green values mark the lowest measured median, and light orange values mark the next two lowest medians, not proven winners. Cells show sample IQR, sample counts, fork counts, and fork medians. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.</p>
+    <p>Bold green values mark the lowest measured median, and light orange values mark the next two lowest medians, not proven winners.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
       <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
@@ -663,7 +651,6 @@ def generate_html_report(records, metadata, downloads=()):
         "    th { background: var(--table-header); font-weight: 600; }",
         "    tr:nth-child(even) td { background: var(--table-stripe); }",
         "    tr:last-child td { border-bottom: none; }",
-        "    td small { display: block; min-width: 11rem; color: var(--text-muted); font-size: 0.7rem; }",
         "    [hidden] { display: none !important; }",
         "    td.num, th.num {",
         "      text-align: right;",
@@ -806,10 +793,6 @@ def generate_html_report(records, metadata, downloads=()):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
-            details = {
-                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
-                    spread_text(r)) + "</small>"
-                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
@@ -855,11 +838,11 @@ def generate_html_report(records, metadata, downloads=()):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert"), runners_up_by_phase.get("insert")) + details.get((lang, impl, "insert"), "")
-                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit"), runners_up_by_phase.get("hit")) + details.get((lang, impl, "hit"), "")
-                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss"), runners_up_by_phase.get("miss")) + details.get((lang, impl, "miss"), "")
-                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate"), runners_up_by_phase.get("iterate")) + details.get((lang, impl, "iterate"), "")
-                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove"), runners_up_by_phase.get("remove")) + details.get((lang, impl, "remove"), "")
+                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert"), runners_up_by_phase.get("insert"))
+                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit"), runners_up_by_phase.get("hit"))
+                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss"), runners_up_by_phase.get("miss"))
+                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate"), runners_up_by_phase.get("iterate"))
+                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove"), runners_up_by_phase.get("remove"))
 
                 table_rows.append(
                     f"              <tr>"
@@ -894,9 +877,6 @@ def generate_html_report(records, metadata, downloads=()):
 
     lines.extend([
         "    </section>",
-        "<h2>Latency by Dataset Size</h2>",
-        "<p>The x-axis shows element counts with equal spacing between measured sizes.</p>",
-        scaling_charts(records, as_html=True),
         "    <footer>",
         "      <p>Ordered Benchmarks Suite</p>",
         "    </footer>",
