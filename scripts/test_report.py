@@ -178,6 +178,124 @@ class ReportTests(unittest.TestCase):
         self.assertIn("**15.00**", output)
         self.assertIn("| 30.00 |", output)
 
+    def test_format_html_metric(self):
+        self.assertEqual(report.format_html_metric(10.5, 10.5), '<strong class="best">10.50</strong>')
+        self.assertEqual(report.format_html_metric(15.2, 10.5), "15.20")
+        self.assertEqual(report.format_html_metric(None, 10.5), "-")
+
+    def test_generate_html_report(self):
+        records = [
+            {
+                "language": "zig",
+                "implementation": "btree_map",
+                "kind": "map",
+                "size": 1000,
+                "order": "ascending",
+                "phase": "insert",
+                "median_ns_per_op": 20.0,
+                "min_ns_per_op": 19.0,
+                "max_ns_per_op": 21.0,
+                "samples": 1,
+            },
+            {
+                "language": "zig",
+                "implementation": "btree_map",
+                "kind": "map",
+                "size": 1000,
+                "order": "ascending",
+                "phase": "hit",
+                "median_ns_per_op": 30.0,
+                "min_ns_per_op": 29.0,
+                "max_ns_per_op": 31.0,
+                "samples": 1,
+            },
+            {
+                "language": "rust",
+                "implementation": "btree_map",
+                "kind": "map",
+                "size": 1000,
+                "order": "ascending",
+                "phase": "insert",
+                "median_ns_per_op": 35.0,
+                "min_ns_per_op": 34.0,
+                "max_ns_per_op": 36.0,
+                "samples": 1,
+            },
+            {
+                "language": "rust",
+                "implementation": "btree_map",
+                "kind": "map",
+                "size": 1000,
+                "order": "ascending",
+                "phase": "hit",
+                "median_ns_per_op": 15.0,
+                "min_ns_per_op": 14.0,
+                "max_ns_per_op": 16.0,
+                "samples": 1,
+            },
+        ]
+        meta = {
+            "cpu": "Test CPU",
+            "platform": "Test OS",
+            "revision": "123456",
+        }
+        output = report.generate_html_report(records, meta)
+        self.assertIn("<!DOCTYPE html>", output)
+        self.assertIn("Benchmark Report: Sorted Maps and Sets", output)
+        self.assertIn("Test CPU", output)
+        self.assertIn("Ordered BTreeMap", output)
+        self.assertIn('<strong class="best">20.00</strong>', output)
+        self.assertIn('<td class="num">35.00</td>', output)
+        self.assertIn('<strong class="best">15.00</strong>', output)
+        self.assertIn('<td class="num">30.00</td>', output)
+        self.assertIn("xychart-beta", output)
+
+    def test_build_site(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            res_dir = base / "results"
+            site_dir = base / "site"
+            res_dir.mkdir()
+
+            summary = res_dir / "summary.csv"
+            with summary.open("w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "language",
+                    "implementation",
+                    "kind",
+                    "size",
+                    "order",
+                    "phase",
+                    "median_ns_per_op",
+                    "min_ns_per_op",
+                    "max_ns_per_op",
+                    "samples",
+                ])
+                writer.writerow([
+                    "zig",
+                    "btree_map",
+                    "map",
+                    "1000",
+                    "ascending",
+                    "insert",
+                    "20.5",
+                    "19.0",
+                    "22.0",
+                    "3",
+                ])
+            (res_dir / "metadata.json").write_text(json.dumps({"cpu": "Test CPU"}))
+            (res_dir / "samples.csv").write_text("header\n")
+
+            report.build_site(res_dir, site_dir)
+
+            self.assertTrue((site_dir / "index.html").exists())
+            self.assertTrue((site_dir / "REPORT.md").exists())
+            self.assertTrue((site_dir / ".nojekyll").exists())
+            self.assertTrue((site_dir / "summary.csv").exists())
+            self.assertTrue((site_dir / "samples.csv").exists())
+            self.assertTrue((site_dir / "metadata.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

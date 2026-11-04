@@ -20,7 +20,7 @@ SHELL       := /usr/bin/env bash
 # Targets
 ################################################################################
 
-.PHONY: all help build run test lint format smoke bench report setup-hooks test-hooks
+.PHONY: all help build run test lint format smoke bench report site setup-hooks test-hooks
 .DEFAULT_GOAL := help
 
 help: ## Show the help messages for all targets
@@ -63,6 +63,10 @@ bench: build ## Run benchmarks with the default workloads or ARGS overrides
 report: ## Generate a Markdown report with tables and charts from benchmark data
 	@echo "Generating benchmark report..."
 	$(PYTHON) $(REPORT) $(ARGS)
+
+site: ## Generate the HTML report and site assets for GitHub Pages deployment
+	@echo "Generating GitHub Pages site..."
+	$(PYTHON) $(REPORT) --site-dir site $(ARGS)
 
 setup-hooks: ## Install Git hooks using the locked Python environment
 	@echo "Installing Git hooks..."
