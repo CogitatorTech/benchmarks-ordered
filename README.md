@@ -43,7 +43,7 @@ make build
 make bench # This may take a while
 ```
 
-The results of the benchmarks are stored in the `results` directory.
+The results of the benchmarks are stored in the `results/` directory.
 
 #### 4. Generate reports (optional)
 
