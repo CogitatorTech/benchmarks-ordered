@@ -77,7 +77,7 @@ The (raw) results of the benchmarks are stored in the `results/` directory.
 make report
 ```
 
-See [docs/benchmarks.md](docs/benchmarks.md) for more details on the benchmarking methodology and how to read the reports.
+Check out [docs/benchmarks.md](docs/benchmarks.md) for more details on the benchmarking methodology.
 
 ---
 
