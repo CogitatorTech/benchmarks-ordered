@@ -50,6 +50,17 @@ STRUCTURE_MAP = {
 
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
 DOWNLOADS = ("summary.csv", "samples.csv", "metadata.json", "flake.lock")
+LANGUAGE_NAMES = {
+    "c": "C",
+    "cpp": "C++",
+    "java": "Java",
+    "rust": "Rust",
+    "zig": "Zig",
+}
+
+
+def format_language(lang):
+    return LANGUAGE_NAMES.get(lang, lang.capitalize() if lang else "")
 
 
 def find_latest_results(base_dir=None):
@@ -251,7 +262,7 @@ def render_environment(meta):
     versions = meta.get("versions", {})
     if versions:
         version_summary = ", ".join(
-            f"{lang}: {ver.splitlines()[0]}" for lang, ver in versions.items()
+            f"{format_language(lang)}: {ver.splitlines()[0]}" for lang, ver in versions.items()
         )
         lines.append(f"| Toolchain Versions | {version_summary} |")
 
@@ -431,7 +442,7 @@ def generate_report(records, metadata):
                                            runners_up_by_phase.get("remove"))
 
                 table_rows.append(
-                    f"| {lang} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"
+                    f"| {format_language(lang)} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"
                 )
 
                 chart_labels.append(short_label)
@@ -459,7 +470,7 @@ def scaling_charts(records, as_html=False):
         rows.sort(key=lambda r: r["size"])
         if len(rows) < 2:
             continue
-        title = f"{language} {impl} {phase.title()} Scaling ({order}, Seed {seed})"
+        title = f"{format_language(language)} {impl} {phase.title()} Scaling ({order}, Seed {seed})"
         code = render_chart_code(title, [str(r["size"]) for r in rows],
                                  [r["median_ns_per_op"] for r in rows]).replace("    bar [",
                                                                                 "    line [")
@@ -497,7 +508,7 @@ def render_html_environment(meta):
     versions = meta.get("versions", {})
     if versions:
         version_summary = ", ".join(
-            f"{lang}: {ver.splitlines()[0]}" for lang, ver in versions.items()
+            f"{format_language(lang)}: {ver.splitlines()[0]}" for lang, ver in versions.items()
         )
         rows.append(("Toolchain Versions", html.escape(version_summary)))
 
@@ -849,7 +860,7 @@ def generate_html_report(records, metadata, downloads=()):
 
                 table_rows.append(
                     f"              <tr>"
-                    f"<td>{html.escape(lang)}</td>"
+                    f"<td>{html.escape(format_language(lang))}</td>"
                     f"<td>{html.escape(friendly_name)}</td>"
                     f"<td>{html.escape(structure)}</td>"
                     f'<td class="num">{insert_str}</td>'

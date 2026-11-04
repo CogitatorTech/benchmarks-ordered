@@ -277,6 +277,8 @@ class ReportTests(unittest.TestCase):
         self.assertIn("# Benchmark Report: Sorted Maps and Sets", output)
         self.assertIn("Test CPU", output)
         self.assertIn("Ordered BTreeMap", output)
+        self.assertIn("| Zig | Ordered BTreeMap |", output)
+        self.assertIn("| Rust | std::collections::BTreeMap |", output)
         # The best insert score (20.00) is bold; the slower insert score (35.00) is not bold.
         self.assertIn("**20.00**", output)
         self.assertIn("| 35.00 |", output)
@@ -285,6 +287,14 @@ class ReportTests(unittest.TestCase):
         self.assertIn("| 30.00 |", output)
         self.assertNotIn("Sorted Iteration Latency", output)
         self.assertNotIn("bar [0.00", output)
+
+    def test_format_language(self):
+        self.assertEqual(report.format_language("c"), "C")
+        self.assertEqual(report.format_language("cpp"), "C++")
+        self.assertEqual(report.format_language("java"), "Java")
+        self.assertEqual(report.format_language("rust"), "Rust")
+        self.assertEqual(report.format_language("zig"), "Zig")
+        self.assertEqual(report.format_language("unknown"), "Unknown")
 
     def test_format_html_metric(self):
         self.assertEqual(report.format_html_metric(10.5, 10.5),
@@ -353,6 +363,8 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Benchmark Report: Sorted Maps and Sets", output)
         self.assertIn("Test CPU", output)
         self.assertIn("Ordered BTreeMap", output)
+        self.assertIn("<td>Zig</td>", output)
+        self.assertIn("<td>Rust</td>", output)
         self.assertIn('<strong class="best">20.00</strong>', output)
         self.assertIn('<td class="num"><span class="runner-up">35.00</span></td>', output)
         self.assertIn('<strong class="best">15.00</strong>', output)
