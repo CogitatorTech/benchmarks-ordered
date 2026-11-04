@@ -270,20 +270,20 @@ def render_interpretation_guide():
     return """## Performance Interpretation Guide
 
 Ascending and shuffled describe insertion order only. Lookup and removal use independent shuffled permutations. Containers are populated and validated before read and removal phases, so these measure recently accessed data. CI timings are exploratory; publish comparisons from a dedicated idle machine with recorded CPU affinity. This benchmark isolates five phases of sorted container operations:
-- Insert: Time to insert $N$ keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
-- Lookup hit: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
-- Lookup miss: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
-- Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
-- Remove: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.
+- **Insert**: Time to insert $N$ keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
+- **Lookup hit**: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
+- **Lookup miss**: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
+- **Iterate**: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
+- **Remove**: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.
 
 Bold values mark the lowest measured median, not a proven winner. Cells show sample IQR and fork medians when raw data is available. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.
 
-### Key Architectural Comparisons
+### Architectural Comparisons
 
-1. B-trees versus binary trees: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
-2. Intrusive and dedicated AVL trees: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.
-3. Flat arrays: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
-4. Java boxed collections versus primitive specialization: Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.
+1. **B-trees versus binary trees**: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
+2. **Intrusive and dedicated AVL trees**: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.
+3. **Flat arrays**: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
+4. **Java boxed collections versus primitive specialization**: Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.
 """
 
 
@@ -817,6 +817,7 @@ def generate_html_report(records, metadata, downloads=()):
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
+            runners_up_by_phase = {}
             for phase in PHASES:
                 vals = [
                     phases[phase]
@@ -824,7 +825,10 @@ def generate_html_report(records, metadata, downloads=()):
                     if phase in phases and phases[phase] >= 0
                 ]
                 if vals:
-                    best_by_phase[phase] = min(vals)
+                    sorted_vals = sorted(vals)
+                    best_by_phase[phase] = sorted_vals[0]
+                    remaining = [v for v in sorted_vals if v != sorted_vals[0]]
+                    runners_up_by_phase[phase] = set(remaining[:2])
 
             chart_labels = []
 
@@ -855,21 +859,11 @@ def generate_html_report(records, metadata, downloads=()):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = format_html_metric(phases.get("insert"),
-                                                best_by_phase.get("insert")) + details.get(
-                    (lang, impl, "insert"), "")
-                hit_str = format_html_metric(phases.get("hit"),
-                                             best_by_phase.get("hit")) + details.get(
-                    (lang, impl, "hit"), "")
-                miss_str = format_html_metric(phases.get("miss"),
-                                              best_by_phase.get("miss")) + details.get(
-                    (lang, impl, "miss"), "")
-                iter_str = format_html_metric(phases.get("iterate"),
-                                              best_by_phase.get("iterate")) + details.get(
-                    (lang, impl, "iterate"), "")
-                remove_str = format_html_metric(phases.get("remove"),
-                                                best_by_phase.get("remove")) + details.get(
-                    (lang, impl, "remove"), "")
+                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert"), runners_up_by_phase.get("insert")) + details.get((lang, impl, "insert"), "")
+                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit"), runners_up_by_phase.get("hit")) + details.get((lang, impl, "hit"), "")
+                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss"), runners_up_by_phase.get("miss")) + details.get((lang, impl, "miss"), "")
+                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate"), runners_up_by_phase.get("iterate")) + details.get((lang, impl, "iterate"), "")
+                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove"), runners_up_by_phase.get("remove")) + details.get((lang, impl, "remove"), "")
 
                 table_rows.append(
                     f"              <tr>"
