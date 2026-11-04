@@ -1,6 +1,7 @@
 ## Benchmarks for the Ordered Library
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/benchmarks-ordered/tests.yml?label=tests&style=flat&labelColor=333333&logo=github&logoColor=white)](https://github.com/CogitatorTech/benchmarks-ordered/actions/workflows/tests.yml)
+[![Benchmark Results](https://img.shields.io/badge/benchamrk%20results-view-507ec6?style=flat&labelColor=282c34&logo=github)](https://cogitatortech.github.io/benchmarks-ordered)
 [![License](https://img.shields.io/badge/license-MIT-3776ab?style=flat&labelColor=333333)](LICENSE)
 
 ---
