@@ -1,8 +1,6 @@
 ## Benchmarks for the Ordered Library
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/benchmarks-ordered/tests.yml?label=tests&style=flat&labelColor=333333&logo=github&logoColor=white)](https://github.com/CogitatorTech/benchmarks-ordered/actions/workflows/tests.yml)
-[![Benchmarks](https://img.shields.io/github/actions/workflow/status/CogitatorTech/benchmarks-ordered/benchmarks.yml?label=benchmarks&style=flat&labelColor=333333&logo=github&logoColor=white)](https://github.com/CogitatorTech/benchmarks-ordered/actions/workflows/benchmarks.yml)
-[![Pages](https://img.shields.io/badge/results-GitHub%20Pages-informational?style=flat&labelColor=333333)](https://cogitatortech.github.io/benchmarks-ordered/)
 [![License](https://img.shields.io/badge/license-MIT-3776ab?style=flat&labelColor=333333)](LICENSE)
 
 ---
@@ -50,15 +48,10 @@ The results of the benchmarks are stored in the `results` directory.
 #### 4. Generate reports (optional)
 
 ```bash
-make report # Generates REPORT.md
-make site   # Generates HTML site in site/
+make report
 ```
 
 ---
-
-### Benchmark Results and GitHub Pages
-
-Benchmark results and visual charts are published to [GitHub Pages](https://cogitatortech.github.io/benchmarks-ordered/). The `Benchmark and Deploy Pages` GitHub Actions workflow runs the benchmarks, generates the report, and deploys the static site using GitHub Actions.
 
 ### Contributing
 
