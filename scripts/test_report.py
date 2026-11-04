@@ -1,9 +1,9 @@
-import csv
 import copy
+import csv
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import report
 
@@ -48,7 +48,8 @@ class ReportTests(unittest.TestCase):
                     "samples",
                 ])
                 for phase in report.PHASES:
-                    writer.writerow(["zig", "btree_map", "map", 1000, "ascending", phase, 20.5, 19, 22, 3])
+                    writer.writerow(
+                        ["zig", "btree_map", "map", 1000, "ascending", phase, 20.5, 19, 22, 3])
             records = report.load_records(d)
             self.assertEqual(len(records), 5)
             self.assertEqual(records[0]["language"], "zig")
@@ -76,7 +77,8 @@ class ReportTests(unittest.TestCase):
                 ])
                 for phase in report.PHASES:
                     for sample, ns in enumerate((25, 35)):
-                        writer.writerow(["rust", "btree_map", "map", 1000, "ascending", phase, 0, sample, ns])
+                        writer.writerow(
+                            ["rust", "btree_map", "map", 1000, "ascending", phase, 0, sample, ns])
             records = report.load_records(d)
             self.assertEqual(len(records), 5)
             self.assertEqual(records[0]["median_ns_per_op"], 30.0)
@@ -88,10 +90,13 @@ class ReportTests(unittest.TestCase):
 
     def test_validate_records(self):
         records = [dict(language="zig", implementation="btree_map", kind="map", size=1000,
-                        order="ascending", phase=phase, samples=2, min_ns_per_op=1, median_ns_per_op=2, max_ns_per_op=3) for phase in report.PHASES]
+                        order="ascending", phase=phase, samples=2, min_ns_per_op=1,
+                        median_ns_per_op=2, max_ns_per_op=3) for phase in report.PHASES]
         report.validate_records(records)
         bad_cases = [[], records[:-1], records + records[:1]]
-        for field, value in (("phase", "unknown"), ("samples", 0), ("samples", 1), ("median_ns_per_op", float("nan")), ("min_ns_per_op", -1), ("max_ns_per_op", 1), ("size", 0), ("kind", "invalid")):
+        for field, value in (("phase", "unknown"), ("samples", 0), ("samples", 1),
+                             ("median_ns_per_op", float("nan")), ("min_ns_per_op", -1),
+                             ("max_ns_per_op", 1), ("size", 0), ("kind", "invalid")):
             bad = copy.deepcopy(records)
             bad[0][field] = value
             bad_cases.append(bad)
@@ -122,7 +127,8 @@ class ReportTests(unittest.TestCase):
                         min_ns_per_op=1, median_ns_per_op=2, max_ns_per_op=3,
                         q1=1.5, q3=2.5, forks=2, fork_medians=[1.5, 2.5])
                    for size in (10, 100) for seed in (42, 123) for phase in report.PHASES]
-        meta = dict(dirty=True, affinity=[2], ordered_source="/local/ordered", runner_environment="GitHub-hosted CI")
+        meta = dict(dirty=True, affinity=[2], ordered_source="/local/ordered",
+                    runner_environment="GitHub-hosted CI")
         markdown = report.generate_report(records, meta)
         output = report.generate_html_report(records, meta)
         for content in (markdown, output):
@@ -142,7 +148,8 @@ class ReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             header = "language,implementation,kind,size,order,phase,fork,sample,ns_per_op\n"
-            rows = "".join(f"rust,btree_map,map,10,ascending,{phase},0,0,2\n" for phase in report.PHASES)
+            rows = "".join(
+                f"rust,btree_map,map,10,ascending,{phase},0,0,2\n" for phase in report.PHASES)
             (path / "samples.csv").write_text(header + rows)
             self.assertEqual(report.load_records(path)[0]["fork_medians"], [2])
             for invalid in (rows + rows.splitlines()[0] + "\n", rows.replace(",2\n", ",nan\n")):
@@ -158,17 +165,21 @@ class ReportTests(unittest.TestCase):
             path = Path(directory)
             with (path / "summary.csv").open("w", newline="") as source:
                 writer = csv.writer(source)
-                writer.writerow(["language", "implementation", "kind", "size", "order", "phase", "median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
+                writer.writerow(["language", "implementation", "kind", "size", "order", "phase",
+                                 "median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
                 for phase in report.PHASES:
-                    writer.writerow(["rust", "btree_map", "map", 10, "ascending", phase, 2, 2, 2, 1])
+                    writer.writerow(
+                        ["rust", "btree_map", "map", 10, "ascending", phase, 2, 2, 2, 1])
             header = "language,implementation,kind,size,order,phase,fork,sample,ns_per_op\n"
-            rows = "".join(f"rust,btree_map,map,10,ascending,{phase},0,0,3\n" for phase in report.PHASES)
+            rows = "".join(
+                f"rust,btree_map,map,10,ascending,{phase},0,0,3\n" for phase in report.PHASES)
             (path / "samples.csv").write_text(header + rows)
             with self.assertRaisesRegex(ValueError, "disagree"):
                 report.load_records(path)
             (path / "samples.csv").write_text(header + rows.replace(",3\n", ",2\n"))
             report.load_records(path)
-            (path / "samples.csv").write_text(header + rows.replace("btree_map", "btree_set").replace(",map,", ",set,"))
+            (path / "samples.csv").write_text(
+                header + rows.replace("btree_map", "btree_set").replace(",map,", ",set,"))
             with self.assertRaisesRegex(ValueError, "coverage differ"):
                 report.load_records(path)
 
@@ -262,7 +273,8 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("bar [0.00", output)
 
     def test_format_html_metric(self):
-        self.assertEqual(report.format_html_metric(10.5, 10.5), '<strong class="best">10.50</strong>')
+        self.assertEqual(report.format_html_metric(10.5, 10.5),
+                         '<strong class="best">10.50</strong>')
         self.assertEqual(report.format_html_metric(15.2, 10.5), "15.20")
         self.assertEqual(report.format_html_metric(None, 10.5), "-")
 
@@ -335,7 +347,9 @@ class ReportTests(unittest.TestCase):
         self.assertIn('<table class="sortable">', output)
         self.assertIn("table.sortable th", output)
         self.assertIn("aria-sort", output)
-        self.assertIn('<th><button type="button">Language<span aria-hidden="true"></span></button></th>', output)
+        self.assertIn(
+            '<th><button type="button">Language<span aria-hidden="true"></span></button></th>',
+            output)
         self.assertIn("th.querySelector('button').addEventListener('click', sortColumn)", output)
         self.assertIn("h.removeAttribute('aria-sort')", output)
         self.assertNotIn("setAttribute('role', 'button')", output)
@@ -371,14 +385,18 @@ class ReportTests(unittest.TestCase):
                     "samples",
                 ])
                 for phase in report.PHASES:
-                    writer.writerow(["zig", "btree_map", "map", 1000, "ascending", phase, 20.5, 19, 22, 3])
+                    writer.writerow(
+                        ["zig", "btree_map", "map", 1000, "ascending", phase, 20.5, 19, 22, 3])
             (res_dir / "metadata.json").write_text(json.dumps({"cpu": "Test CPU"}))
             with (res_dir / "samples.csv").open("w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["language", "implementation", "kind", "size", "order", "phase", "fork", "sample", "ns_per_op"])
+                writer.writerow(
+                    ["language", "implementation", "kind", "size", "order", "phase", "fork",
+                     "sample", "ns_per_op"])
                 for phase in report.PHASES:
                     for sample, value in enumerate((19, 20.5, 22)):
-                        writer.writerow(["zig", "btree_map", "map", 1000, "ascending", phase, 0, sample, value])
+                        writer.writerow(
+                            ["zig", "btree_map", "map", 1000, "ascending", phase, 0, sample, value])
 
             report.build_site(res_dir, site_dir)
 
@@ -392,7 +410,9 @@ class ReportTests(unittest.TestCase):
 
             with (res_dir / "samples.csv").open("w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["language", "implementation", "kind", "size", "order", "phase", "fork", "sample", "ns_per_op"])
+                writer.writerow(
+                    ["language", "implementation", "kind", "size", "order", "phase", "fork",
+                     "sample", "ns_per_op"])
                 for phase in report.PHASES:
                     writer.writerow(["zig", "btree_map", "map", 1000, "ascending", phase, 0, 0, 30])
             summary.unlink()
@@ -403,7 +423,8 @@ class ReportTests(unittest.TestCase):
             for name in ("summary.csv", "metadata.json", "flake.lock"):
                 self.assertFalse((site_dir / name).exists())
                 self.assertNotIn(f'href="{name}"', (site_dir / "index.html").read_text())
-            self.assertEqual((site_dir / "samples.csv").read_bytes(), (res_dir / "samples.csv").read_bytes())
+            self.assertEqual((site_dir / "samples.csv").read_bytes(),
+                             (res_dir / "samples.csv").read_bytes())
             self.assertIn('href="samples.csv"', (site_dir / "index.html").read_text())
             self.assertEqual((site_dir / "custom.txt").read_text(), "keep")
 

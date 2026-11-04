@@ -5,10 +5,10 @@ import csv
 import html
 import json
 import math
-from pathlib import Path
 import shutil
 import statistics
 import sys
+from pathlib import Path
 
 from bench import IMPLS
 
@@ -40,10 +40,14 @@ STRUCTURE_MAP = {
     ("cpp", "boost_flat_set"): ("Boost flat_set", "Flat Sorted Vector", "C++ Boost flat"),
     ("java", "tree_map"): ("java.util.TreeMap", "Red-Black Tree (boxed Long)", "Java TreeMap"),
     ("java", "tree_set"): ("java.util.TreeSet", "Red-Black Tree (boxed Long)", "Java TreeSet"),
-    ("java", "fastutil_avl_map"): ("fastutil AVLTreeMap", "AVL Tree (primitive long)", "Java fastutil AVL"),
-    ("java", "fastutil_avl_set"): ("fastutil AVLTreeSet", "AVL Tree (primitive long)", "Java fastutil AVL"),
-    ("java", "fastutil_rb_map"): ("fastutil RBTreeMap", "Red-Black Tree (primitive long)", "Java fastutil RB"),
-    ("java", "fastutil_rb_set"): ("fastutil RBTreeSet", "Red-Black Tree (primitive long)", "Java fastutil RB"),
+    ("java", "fastutil_avl_map"): ("fastutil AVLTreeMap", "AVL Tree (primitive long)",
+                                   "Java fastutil AVL"),
+    ("java", "fastutil_avl_set"): ("fastutil AVLTreeSet", "AVL Tree (primitive long)",
+                                   "Java fastutil AVL"),
+    ("java", "fastutil_rb_map"): ("fastutil RBTreeMap", "Red-Black Tree (primitive long)",
+                                  "Java fastutil RB"),
+    ("java", "fastutil_rb_set"): ("fastutil RBTreeSet", "Red-Black Tree (primitive long)",
+                                  "Java fastutil RB"),
 }
 
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
@@ -58,7 +62,7 @@ def find_latest_results(base_dir=None):
         d
         for d in results_dir.iterdir()
         if d.is_dir()
-        and (d / "summary.csv").is_file()
+           and (d / "summary.csv").is_file()
     ]
     if not candidates:
         raise FileNotFoundError(f"No completed benchmark results found in {results_dir}")
@@ -69,7 +73,8 @@ KEY_FIELDS = ("language", "implementation", "kind", "size", "order", "seed", "ph
 
 
 def record_key(record):
-    return tuple(record.get(field, 42) if field == "seed" else record[field] for field in KEY_FIELDS)
+    return tuple(
+        record.get(field, 42) if field == "seed" else record[field] for field in KEY_FIELDS)
 
 
 def load_records(result_dir):
@@ -92,7 +97,8 @@ def load_records(result_dir):
     if samples_path.exists():
         with samples_path.open(newline="") as source:
             reader = csv.DictReader(source)
-            if not set((*KEY_FIELDS[:-2], "phase", "fork", "sample", "ns_per_op")).issubset(reader.fieldnames or []):
+            if not set((*KEY_FIELDS[:-2], "phase", "fork", "sample", "ns_per_op")).issubset(
+                reader.fieldnames or []):
                 raise ValueError("Invalid samples header")
             for row in reader:
                 row["size"] = int(row["size"])
@@ -109,11 +115,15 @@ def load_records(result_dir):
         for key, values in groups.items():
             observations = list(values.values())
             forks = sorted({fork for fork, _ in values})
-            fork_medians = [statistics.median(value for (f, _), value in values.items() if f == fork) for fork in forks]
-            q1, _, q3 = statistics.quantiles(observations, n=4, method="inclusive") if len(observations) > 1 else observations * 3
+            fork_medians = [
+                statistics.median(value for (f, _), value in values.items() if f == fork) for fork
+                in forks]
+            q1, _, q3 = statistics.quantiles(observations, n=4, method="inclusive") if len(
+                observations) > 1 else observations * 3
             raw_records.append(dict(zip(KEY_FIELDS, key),
                                     median_ns_per_op=statistics.median(observations),
-                                    min_ns_per_op=min(observations), max_ns_per_op=max(observations),
+                                    min_ns_per_op=min(observations),
+                                    max_ns_per_op=max(observations),
                                     samples=len(observations), q1=q1, q3=q3, forks=len(forks),
                                     fork_medians=fork_medians, sample_ids=set(values)))
         validate_records(raw_records)
@@ -123,7 +133,9 @@ def load_records(result_dir):
                 raise ValueError("Summary and raw sample coverage differ")
             for row in records:
                 raw = indexed[record_key(row)]
-                if row["samples"] != raw["samples"] or any(not math.isclose(row[field], raw[field], rel_tol=1e-9, abs_tol=1e-12) for field in ("median_ns_per_op", "min_ns_per_op", "max_ns_per_op")):
+                if row["samples"] != raw["samples"] or any(
+                    not math.isclose(row[field], raw[field], rel_tol=1e-9, abs_tol=1e-12) for field
+                    in ("median_ns_per_op", "min_ns_per_op", "max_ns_per_op")):
                     raise ValueError("Summary and raw samples disagree")
                 row.update(raw)
         else:
@@ -141,10 +153,13 @@ def validate_records(records, metadata=None):
     for record in records:
         key = record_key(record)[:-1]
         phase = record["phase"]
-        timings = [record[field] for field in ("min_ns_per_op", "median_ns_per_op", "max_ns_per_op")]
+        timings = [record[field] for field in
+                   ("min_ns_per_op", "median_ns_per_op", "max_ns_per_op")]
         if any(not math.isfinite(v) or v < 0 for v in timings) or timings != sorted(timings):
             raise ValueError(f"Invalid timing values: {key}")
-        if record["kind"] not in ("map", "set") or not record["implementation"].endswith("_" + record["kind"]) or record["size"] <= 0 or record["order"] not in ("ascending", "shuffled"):
+        if record["kind"] not in ("map", "set") or not record["implementation"].endswith(
+            "_" + record["kind"]) or record["size"] <= 0 or record["order"] not in ("ascending",
+                                                                                    "shuffled"):
             raise ValueError(f"Invalid workload: {key}")
         phases = groups.setdefault(key, {})
         if phase not in PHASES or phase in phases or record["samples"] < 1:
@@ -153,7 +168,8 @@ def validate_records(records, metadata=None):
     for key, phases in groups.items():
         if set(phases) != set(PHASES) or len({r["samples"] for r in phases.values()}) != 1:
             raise ValueError(f"Incomplete benchmark phases or unequal sample counts: {key}")
-        if "sample_ids" in next(iter(phases.values())) and len({frozenset(r["sample_ids"]) for r in phases.values()}) != 1:
+        if "sample_ids" in next(iter(phases.values())) and len(
+            {frozenset(r["sample_ids"]) for r in phases.values()}) != 1:
             raise ValueError(f"Unequal sample identities: {key}")
     meta = metadata or {}
     implementations = meta.get("implementations")
@@ -172,9 +188,11 @@ def validate_records(records, metadata=None):
     if set(groups) != expected:
         raise ValueError("Incomplete implementation or workload coverage")
     if "samples_per_fork" in meta:
-        identities = {(fork, sample) for fork in range(meta["forks"]) for sample in range(meta["samples_per_fork"])}
+        identities = {(fork, sample) for fork in range(meta["forks"]) for sample in
+                      range(meta["samples_per_fork"])}
         for row in records:
-            if row["samples"] != len(identities) or ("sample_ids" in row and row["sample_ids"] != identities):
+            if row["samples"] != len(identities) or (
+                "sample_ids" in row and row["sample_ids"] != identities):
                 raise ValueError("Samples differ from the recorded run configuration")
 
 
@@ -192,7 +210,8 @@ def provenance_rows(meta):
     return [("Runner environment", meta.get("runner_environment", "Unknown")),
             ("Dirty working tree", meta.get("dirty", "Unknown")),
             ("Ordered source", meta.get("ordered_source", "Unknown")),
-            ("Ordered local revision and changes", meta.get("ordered_git", "No local Git information")),
+            ("Ordered local revision and changes",
+             meta.get("ordered_git", "No local Git information")),
             ("CPU affinity", meta.get("affinity", "Unknown")),
             ("Warmups by language", meta.get("warmups", "Unknown")),
             ("Samples per fork", meta.get("samples_per_fork", "Unknown")),
@@ -206,7 +225,6 @@ def spread_text(record):
         return f"Range {record['min_ns_per_op']:.2f}–{record['max_ns_per_op']:.2f}; {record['samples']} samples; IQR and forks unavailable"
     medians = ", ".join(f"{v:.2f}" for v in record["fork_medians"])
     return f"IQR {record['q1']:.2f}–{record['q3']:.2f}; {record['samples']} samples; {record['forks']} forks; fork medians [{medians}]"
-
 
 
 def render_environment(meta):
@@ -241,7 +259,9 @@ def render_environment(meta):
         )
         lines.append(f"| Toolchain Versions | {version_summary} |")
 
-    lines.extend(f"| {label} | `{str(value).replace(chr(10), ' ').replace('|', '/')}` |" for label, value in provenance_rows(meta))
+    lines.extend(
+        f"| {label} | `{str(value).replace(chr(10), ' ').replace('|', '/')}` |" for label, value in
+        provenance_rows(meta))
     lines.append("")
     return "\n".join(lines)
 
@@ -340,7 +360,8 @@ def generate_report(records, metadata):
     lines.append(render_environment(metadata))
     lines.append(render_interpretation_guide())
 
-    combos = sorted({(r["size"], r["order"], r.get("seed", 42)) for r in records})
+    combos = sorted({(r["size"], r["order"], r.get("seed", 42)) for r in records},
+                    key=lambda c: (-c[0], c[1], c[2]))
 
     lines.append("## Benchmark Results by Workload")
     lines.append("")
@@ -359,7 +380,8 @@ def generate_report(records, metadata):
             matching = [
                 r
                 for r in records
-                if r["size"] == size and r["order"] == order and r.get("seed", 42) == seed and r["kind"] == kind
+                if r["size"] == size and r["order"] == order and r.get("seed", 42) == seed and r[
+                    "kind"] == kind
             ]
             if not matching:
                 continue
@@ -369,11 +391,14 @@ def generate_report(records, metadata):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
-            details = {(r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(spread_text(r)) + "</small>"
-                       for r in matching if "q1" in r or r.get("summary_only")}
+            details = {
+                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
+                    spread_text(r)) + "</small>"
+                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
+            runners_up_by_phase = {}
             for phase in PHASES:
                 vals = [
                     phases[phase]
@@ -381,7 +406,10 @@ def generate_report(records, metadata):
                     if phase in phases and phases[phase] >= 0
                 ]
                 if vals:
-                    best_by_phase[phase] = min(vals)
+                    sorted_vals = sorted(vals)
+                    best_by_phase[phase] = sorted_vals[0]
+                    remaining = [v for v in sorted_vals if v != sorted_vals[0]]
+                    runners_up_by_phase[phase] = set(remaining[:2])
 
             chart_labels = []
 
@@ -399,11 +427,21 @@ def generate_report(records, metadata):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = format_metric(phases.get("insert"), best_by_phase.get("insert")) + details.get((lang, impl, "insert"), "")
-                hit_str = format_metric(phases.get("hit"), best_by_phase.get("hit")) + details.get((lang, impl, "hit"), "")
-                miss_str = format_metric(phases.get("miss"), best_by_phase.get("miss")) + details.get((lang, impl, "miss"), "")
-                iter_str = format_metric(phases.get("iterate"), best_by_phase.get("iterate")) + details.get((lang, impl, "iterate"), "")
-                remove_str = format_metric(phases.get("remove"), best_by_phase.get("remove")) + details.get((lang, impl, "remove"), "")
+                insert_str = format_metric(phases.get("insert"), best_by_phase.get("insert"),
+                                           runners_up_by_phase.get("insert")) + details.get(
+                    (lang, impl, "insert"), "")
+                hit_str = format_metric(phases.get("hit"), best_by_phase.get("hit"),
+                                        runners_up_by_phase.get("hit")) + details.get(
+                    (lang, impl, "hit"), "")
+                miss_str = format_metric(phases.get("miss"), best_by_phase.get("miss"),
+                                         runners_up_by_phase.get("miss")) + details.get(
+                    (lang, impl, "miss"), "")
+                iter_str = format_metric(phases.get("iterate"), best_by_phase.get("iterate"),
+                                         runners_up_by_phase.get("iterate")) + details.get(
+                    (lang, impl, "iterate"), "")
+                remove_str = format_metric(phases.get("remove"), best_by_phase.get("remove"),
+                                           runners_up_by_phase.get("remove")) + details.get(
+                    (lang, impl, "remove"), "")
 
                 table_rows.append(
                     f"| {lang} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"
@@ -420,7 +458,9 @@ def generate_report(records, metadata):
                 chart = render_chart(title, chart_labels, values)
                 lines.append(chart)
 
-    lines.extend(["## Latency by Dataset Size", "", "The x-axis shows element counts with equal spacing between measured sizes.", "", scaling_charts(records)])
+    lines.extend(["## Latency by Dataset Size", "",
+                  "The x-axis shows element counts with equal spacing between measured sizes.", "",
+                  scaling_charts(records)])
     return "\n".join(lines)
 
 
@@ -428,16 +468,20 @@ def scaling_charts(records, as_html=False):
     lines = []
     groups = {}
     for row in records:
-        key = (row["kind"], row["order"], row.get("seed", 42), row["phase"], row["language"], row["implementation"])
+        key = (row["kind"], row["order"], row.get("seed", 42), row["phase"], row["language"],
+               row["implementation"])
         groups.setdefault(key, []).append(row)
     for (kind, order, seed, phase, language, impl), rows in sorted(groups.items()):
         rows.sort(key=lambda r: r["size"])
         if len(rows) < 2:
             continue
         title = f"{language} {impl} {phase.title()} Scaling ({order}, Seed {seed})"
-        code = render_chart_code(title, [str(r["size"]) for r in rows], [r["median_ns_per_op"] for r in rows]).replace("    bar [", "    line [")
+        code = render_chart_code(title, [str(r["size"]) for r in rows],
+                                 [r["median_ns_per_op"] for r in rows]).replace("    bar [",
+                                                                                "    line [")
         if as_html:
-            lines.append(f'<div data-kind="{kind}" data-order="{order}" data-phase="{phase}"><h3>{html.escape(title)}</h3><pre class="mermaid">{html.escape(code)}</pre></div>')
+            lines.append(
+                f'<div data-kind="{kind}" data-order="{order}" data-phase="{phase}"><h3>{html.escape(title)}</h3><pre class="mermaid">{html.escape(code)}</pre></div>')
         else:
             lines.append(f"### {title}\n\n```mermaid\n{code}\n```\n")
     return "\n".join(lines)
@@ -505,7 +549,7 @@ def render_html_interpretation_guide():
       <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
       <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
     </ul>
-    <p>Bold green values mark the lowest measured median, not a proven winner. Cells show sample IQR, sample counts, fork counts, and fork medians. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.</p>
+    <p>Bold green values mark the lowest measured median, and light orange values mark the next two lowest medians, not proven winners. Cells show sample IQR, sample counts, fork counts, and fork medians. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
       <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
@@ -517,7 +561,8 @@ def render_html_interpretation_guide():
 
 
 def generate_html_report(records, metadata, downloads=()):
-    combos = sorted({(r["size"], r["order"], r.get("seed", 42)) for r in records})
+    combos = sorted({(r["size"], r["order"], r.get("seed", 42)) for r in records},
+                    key=lambda c: (-c[0], c[1], c[2]))
 
     nav_links = [
         '        <a class="btn" href="#system-environment">System Environment</a>',
@@ -527,7 +572,8 @@ def generate_html_report(records, metadata, downloads=()):
         size_label = f"{size:,}"
         order_title = "Ascending" if order == "ascending" else "Shuffled"
         anchor = f"workload-{size}-{order}-{seed}"
-        nav_links.append(f'        <a class="btn" href="#{anchor}">Size {size_label} ({order_title}, Seed {seed})</a>')
+        nav_links.append(
+            f'        <a class="btn" href="#{anchor}">Size {size_label} ({order_title}, Seed {seed})</a>')
 
     lines = [
         "<!DOCTYPE html>",
@@ -547,6 +593,8 @@ def generate_html_report(records, metadata, downloads=()):
         "      --table-stripe: #f8fafc;",
         "      --best-bg: #dcfce7;",
         "      --best-color: #166534;",
+        "      --runner-up-bg: #ffedd5;",
+        "      --runner-up-color: #9a3412;",
         "      --accent: #2563eb;",
         "      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;",
         "    }",
@@ -561,6 +609,8 @@ def generate_html_report(records, metadata, downloads=()):
         "        --table-stripe: #161b22;",
         "        --best-bg: #0f3d24;",
         "        --best-color: #7ee787;",
+        "        --runner-up-bg: #431407;",
+        "        --runner-up-color: #fdba74;",
         "        --accent: #58a6ff;",
         "      }",
         "    }",
@@ -671,6 +721,13 @@ def generate_html_report(records, metadata, downloads=()):
         "      padding: 0.15rem 0.35rem;",
         "      border-radius: 4px;",
         "    }",
+        "    .runner-up {",
+        "      font-weight: 600;",
+        "      color: var(--runner-up-color);",
+        "      background: var(--runner-up-bg);",
+        "      padding: 0.15rem 0.35rem;",
+        "      border-radius: 4px;",
+        "    }",
         "    .chart-card {",
         "      background: var(--card-bg);",
         "      border: 1px solid var(--border);",
@@ -715,7 +772,9 @@ def generate_html_report(records, metadata, downloads=()):
         render_html_environment(metadata),
         render_html_interpretation_guide(),
         '<div class="card" id="filters">',
-        '<label>Operation <select id="phase-filter"><option value="">All</option>' + ''.join(f'<option value="{phase}">{phase.title()}</option>' for phase in PHASES) + '</select></label>',
+        '<label>Operation <select id="phase-filter"><option value="">All</option>' + ''.join(
+            f'<option value="{phase}">{phase.title()}</option>' for phase in
+            PHASES) + '</select></label>',
         '<label> Container <select id="kind-filter"><option value="">All</option><option value="map">Map</option><option value="set">Set</option></select></label>',
         '<label> Insertion order <select id="order-filter"><option value="">All</option><option value="ascending">Ascending</option><option value="shuffled">Shuffled</option></select></label>',
         '</div>',
@@ -728,7 +787,8 @@ def generate_html_report(records, metadata, downloads=()):
         order_title = "Ascending Keys" if order == "ascending" else "Shuffled Keys"
         anchor = f"workload-{size}-{order}-{seed}"
         lines.append(f'      <section id="{anchor}" class="workload-section" data-order="{order}">')
-        lines.append(f"        <h3>Workload: Size = {size_label} Elements ({order_title}, Seed {seed})</h3>")
+        lines.append(
+            f"        <h3>Workload: Size = {size_label} Elements ({order_title}, Seed {seed})</h3>")
 
         for kind in ("map", "set"):
             kind_title = "Sorted Maps" if kind == "map" else "Sorted Sets"
@@ -738,7 +798,8 @@ def generate_html_report(records, metadata, downloads=()):
             matching = [
                 r
                 for r in records
-                if r["size"] == size and r["order"] == order and r.get("seed", 42) == seed and r["kind"] == kind
+                if r["size"] == size and r["order"] == order and r.get("seed", 42) == seed and r[
+                    "kind"] == kind
             ]
             if not matching:
                 lines.append("</div>")
@@ -749,8 +810,10 @@ def generate_html_report(records, metadata, downloads=()):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
-            details = {(r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(spread_text(r)) + "</small>"
-                       for r in matching if "q1" in r or r.get("summary_only")}
+            details = {
+                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
+                    spread_text(r)) + "</small>"
+                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
@@ -792,11 +855,21 @@ def generate_html_report(records, metadata, downloads=()):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert")) + details.get((lang, impl, "insert"), "")
-                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit")) + details.get((lang, impl, "hit"), "")
-                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss")) + details.get((lang, impl, "miss"), "")
-                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate")) + details.get((lang, impl, "iterate"), "")
-                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove")) + details.get((lang, impl, "remove"), "")
+                insert_str = format_html_metric(phases.get("insert"),
+                                                best_by_phase.get("insert")) + details.get(
+                    (lang, impl, "insert"), "")
+                hit_str = format_html_metric(phases.get("hit"),
+                                             best_by_phase.get("hit")) + details.get(
+                    (lang, impl, "hit"), "")
+                miss_str = format_html_metric(phases.get("miss"),
+                                              best_by_phase.get("miss")) + details.get(
+                    (lang, impl, "miss"), "")
+                iter_str = format_html_metric(phases.get("iterate"),
+                                              best_by_phase.get("iterate")) + details.get(
+                    (lang, impl, "iterate"), "")
+                remove_str = format_html_metric(phases.get("remove"),
+                                                best_by_phase.get("remove")) + details.get(
+                    (lang, impl, "remove"), "")
 
                 table_rows.append(
                     f"              <tr>"
@@ -912,7 +985,8 @@ def build_site(results_dir, site_dir):
     metadata = load_metadata(results_dir)
 
     report_md = generate_report(records, metadata)
-    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if
+                                                           (results_dir / name).is_file()])
 
     (site_dir / "index.html").write_text(report_html, encoding="utf-8")
     (site_dir / "REPORT.md").write_text(report_md, encoding="utf-8")
@@ -965,7 +1039,8 @@ def main():
     in_dir_report.write_text(report_md, encoding="utf-8")
     print(f"Copy written to: {in_dir_report}")
 
-    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if
+                                                           (results_dir / name).is_file()])
     in_dir_html = results_dir / "index.html"
     in_dir_html.write_text(report_html, encoding="utf-8")
     print(f"Copy written to: {in_dir_html}")

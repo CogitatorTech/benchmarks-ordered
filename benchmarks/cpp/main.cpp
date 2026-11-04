@@ -18,7 +18,7 @@ static void measure(const Dataset &data, bool emit) {
     times[0] = now_ns() - start;
     CHECK(collection.size() == data.n);
     size_t index = 0;
-    for (const auto &entry : collection) {
+    for (const auto &entry: collection) {
         if constexpr (IsSet) CHECK(entry == (int64_t)(index * 2));
         else CHECK(entry.first == (int64_t)(index * 2) && entry.second == entry.first + 1);
         ++index;
@@ -43,7 +43,7 @@ static void measure(const Dataset &data, bool emit) {
         }
         CHECK(collection.size() == data.n);
         size_t index = 0;
-        for (const auto &entry : collection) {
+        for (const auto &entry: collection) {
             if constexpr (IsSet) CHECK(entry == (int64_t)(index * 2));
             else CHECK(entry.first == (int64_t)(index * 2) && entry.second == entry.first + 1);
             ++index;
@@ -72,7 +72,7 @@ static void measure(const Dataset &data, bool emit) {
     sum = 0;
     reset();
     start = now_ns();
-    for (const auto &entry : collection) {
+    for (const auto &entry: collection) {
         if constexpr (IsSet) sum += entry;
         else sum += entry.second;
     }
@@ -97,7 +97,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "std_set")) measure<std::set<int64_t>, true>(data, emit);
         else if (!strcmp(argv[1], "absl_map")) measure<absl::btree_map<int64_t, int64_t>, false>(data, emit);
         else if (!strcmp(argv[1], "absl_set")) measure<absl::btree_set<int64_t>, true>(data, emit);
-        else if (!strcmp(argv[1], "boost_flat_map")) measure<boost::container::flat_map<int64_t, int64_t>, false>(data, emit);
+        else if (!strcmp(argv[1], "boost_flat_map")) measure<boost::container::flat_map<int64_t, int64_t>,
+            false>(data, emit);
         else if (!strcmp(argv[1], "boost_flat_set")) measure<boost::container::flat_set<int64_t>, true>(data, emit);
         else CHECK(0);
     }

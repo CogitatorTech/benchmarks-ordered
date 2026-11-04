@@ -10,13 +10,16 @@
 
 #define CHECK(ok) do { if (!(ok)) { fprintf(stderr, "Check failed at %s:%d: %s\n", __FILE__, __LINE__, #ok); exit(1); } } while (0)
 
-typedef struct { size_t n; int64_t *insert, *lookup, *remove; } Dataset;
+typedef struct {
+    size_t n;
+    int64_t *insert, *lookup, *remove;
+} Dataset;
 
 static uint64_t read_u64(FILE *file) {
     unsigned char bytes[8];
     CHECK(fread(bytes, 1, 8, file) == 8);
     uint64_t value = 0;
-    for (int i = 0; i < 8; ++i) value |= (uint64_t)bytes[i] << (8 * i);
+    for (int i = 0; i < 8; ++i) value |= (uint64_t) bytes[i] << (8 * i);
     return value;
 }
 
@@ -26,15 +29,15 @@ static Dataset load(const char *path) {
     uint64_t n = read_u64(file);
     CHECK(n <= 10000000);
     Dataset data;
-    data.n = (size_t)n;
-    data.insert = (int64_t *)malloc((n * 3 + 1) * sizeof(int64_t));
+    data.n = (size_t) n;
+    data.insert = (int64_t *) malloc((n * 3 + 1) * sizeof(int64_t));
     CHECK(data.insert != NULL);
     data.lookup = data.insert + n;
     data.remove = data.lookup + n;
     for (size_t i = 0; i < n * 3; ++i) {
         uint64_t key = read_u64(file);
         CHECK(key < n * 2 && key % 2 == 0);
-        data.insert[i] = (int64_t)key;
+        data.insert[i] = (int64_t) key;
     }
     CHECK(fgetc(file) == EOF && !ferror(file));
     CHECK(fclose(file) == 0);
@@ -44,7 +47,7 @@ static Dataset load(const char *path) {
 static uint64_t now_ns(void) {
     struct timespec t;
     CHECK(clock_gettime(CLOCK_MONOTONIC, &t) == 0);
-    return (uint64_t)t.tv_sec * 1000000000 + (uint64_t)t.tv_nsec;
+    return (uint64_t) t.tv_sec * 1000000000 + (uint64_t) t.tv_nsec;
 }
 
 static void report(const uint64_t times[5]) {
@@ -57,6 +60,6 @@ static unsigned parse_repeats(const char *arg, unsigned minimum) {
     char *end;
     unsigned long n = strtoul(arg, &end, 10);
     CHECK(*arg && !*end && n >= minimum && n <= 1000);
-    return (unsigned)n;
+    return (unsigned) n;
 }
 #endif
