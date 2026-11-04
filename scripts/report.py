@@ -592,7 +592,8 @@ def generate_html_report(records, metadata, downloads=()):
         "      margin: 1rem 0 1.5rem;",
         "      overflow-x: auto;",
         "    }",
-        "    .mermaid { display: flex; justify-content: center; }",
+        # Flex layout collapses Mermaid's temporary SVG text measurements.
+        "    .mermaid { display: block; text-align: center; }",
         "    code {",
         "      font-family: var(--font-mono);",
         "      font-size: 0.85em;",

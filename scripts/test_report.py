@@ -269,6 +269,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("labelRotation: 90", output)
         self.assertIn("labelPadding: 16", output)
         self.assertIn("height: 650", output)
+        self.assertIn(".mermaid { display: block; text-align: center; }", output)
         self.assertNotIn("Sorted Iteration Latency", output)
         self.assertNotIn("bar [0.00", output)
         self.assertNotIn('href="samples.csv"', output)
