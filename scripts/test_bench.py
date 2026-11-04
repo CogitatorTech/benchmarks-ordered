@@ -3,7 +3,9 @@ import copy
 from pathlib import Path
 import struct
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import bench
 
@@ -61,8 +63,26 @@ class HarnessTests(unittest.TestCase):
             for impl in impls:
                 self.assertTrue(
                     impl.endswith("_map") or impl.endswith("_set"),
-                    f"{impl} must end with _map or _set",
+                    f"The implementation name '{impl}' must end with '_map' or '_set'.",
                 )
+
+    def test_summary_is_published_only_after_success(self):
+        output = "\n".join(f"{phase},10" for phase in bench.PHASES)
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(sizes="1", output=str(Path(directory) / "success"),
+                                   warmups=0, samples=1, forks=1)
+            with patch.object(bench, "require_env"), patch.object(bench, "metadata", return_value={}), \
+                 patch.object(bench, "IMPLS", {"rust": ["btree_map"]}), \
+                 patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)):
+                bench.bench(args, ["rust"])
+                self.assertTrue((Path(args.output) / "summary.csv").is_file())
+                self.assertFalse((Path(args.output) / "summary.csv.tmp").exists())
+                args.output = str(Path(directory) / "failed")
+                with patch.object(bench.statistics, "median", side_effect=ValueError("interrupted")):
+                    with self.assertRaisesRegex(ValueError, "interrupted"):
+                        bench.bench(args, ["rust"])
+                self.assertFalse((Path(args.output) / "summary.csv").exists())
+                self.assertTrue((Path(args.output) / "summary.csv.tmp").is_file())
 
 
 if __name__ == "__main__":

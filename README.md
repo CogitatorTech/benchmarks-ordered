@@ -1,11 +1,14 @@
 ## Benchmarks for the Ordered Library
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/benchmarks-ordered/tests.yml?label=tests&style=flat&labelColor=333333&logo=github&logoColor=white)](https://github.com/CogitatorTech/benchmarks-ordered/actions/workflows/tests.yml)
+[![Benchmark Results](https://img.shields.io/badge/benchmark%20results-view-507ec6?style=flat&labelColor=282c34&logo=github)](https://cogitatortech.github.io/benchmarks-ordered)
 [![License](https://img.shields.io/badge/license-MIT-3776ab?style=flat&labelColor=333333)](LICENSE)
 
 ---
 
 Benchmarks to compare sorted maps and sets implemented in the Ordered Zig library with similar implementations in Rust, C, C++, and Java.
+
+**You can see the latest benchmark results [here](https://cogitatortech.github.io/benchmarks-ordered/).**
 
 ### Implementations
 
@@ -43,9 +46,9 @@ make build
 make bench # This may take a while
 ```
 
-The results of the benchmarks are stored in the `results/` directory.
+The (raw) results of the benchmarks are stored in the `results/` directory.
 
-#### 4. Generate reports (optional)
+#### 4. Generate the performance report (optional)
 
 ```bash
 make report

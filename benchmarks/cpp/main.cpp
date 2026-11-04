@@ -8,8 +8,8 @@
 
 template<class Collection, bool IsSet>
 static void measure(const Dataset &data, bool emit) {
-    Collection collection;
     uint64_t times[5], start = now_ns();
+    Collection collection;
     for (size_t i = 0; i < data.n; ++i) {
         int64_t key = data.insert[i];
         if constexpr (IsSet) collection.insert(key);

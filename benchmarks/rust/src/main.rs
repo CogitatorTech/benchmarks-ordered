@@ -116,9 +116,9 @@ fn fresh<C: Collection>(keys: &[i64], n: usize) -> C {
 }
 
 fn measure<C: Collection>(keys: &[i64], n: usize, emit: bool) {
-    let mut c = C::default();
     let mut times = [0u128; 5];
     let start = Instant::now();
+    let mut c = C::default();
     for &k in &keys[..n] {
         c.put(k, k + 1);
     }

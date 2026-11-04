@@ -191,11 +191,12 @@ def bench(args, languages):
     groups = {}
     for row in samples:
         groups.setdefault(tuple(row[:6]), []).append(row[-1])
-    with (dest / "summary.csv").open("w", newline="") as out:
+    with (dest / "summary.csv.tmp").open("w", newline="") as out:
         writer = csv.writer(out)
         writer.writerow(header[:6] + ["median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
         for key, values in groups.items():
             writer.writerow([*key, statistics.median(values), min(values), max(values), len(values)])
+    (dest / "summary.csv.tmp").replace(dest / "summary.csv")
     print(f"Results: {dest}")
 
 

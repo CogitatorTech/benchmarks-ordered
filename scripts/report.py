@@ -45,6 +45,7 @@ STRUCTURE_MAP = {
 }
 
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
+DOWNLOADS = ("summary.csv", "samples.csv", "metadata.json", "flake.lock")
 
 
 def find_latest_results(base_dir=None):
@@ -55,10 +56,10 @@ def find_latest_results(base_dir=None):
         d
         for d in results_dir.iterdir()
         if d.is_dir()
-        and ((d / "summary.csv").exists() or (d / "samples.csv").exists())
+        and (d / "summary.csv").is_file()
     ]
     if not candidates:
-        raise FileNotFoundError(f"No benchmark results found in {results_dir}")
+        raise FileNotFoundError(f"No completed benchmark results found in {results_dir}")
     return max(candidates, key=lambda d: d.name)
 
 
@@ -81,6 +82,7 @@ def load_records(result_dir):
                     "max_ns_per_op": float(r["max_ns_per_op"]),
                     "samples": int(r["samples"]),
                 })
+            validate_records(records)
             return records
 
     samples_path = result_dir / "samples.csv"
@@ -115,7 +117,24 @@ def load_records(result_dir):
             "max_ns_per_op": max(values),
             "samples": len(values),
         })
+    validate_records(records)
     return records
+
+
+def validate_records(records):
+    if not records:
+        raise ValueError("Benchmark results are empty")
+    groups = {}
+    for record in records:
+        key = tuple(record[field] for field in ("language", "implementation", "kind", "size", "order"))
+        phases = groups.setdefault(key, {})
+        phase = record["phase"]
+        if phase not in PHASES or phase in phases or record["samples"] < 1:
+            raise ValueError(f"Invalid benchmark phase or sample count: {key}")
+        phases[phase] = record["samples"]
+    for key, phases in groups.items():
+        if set(phases) != set(PHASES) or len(set(phases.values())) != 1:
+            raise ValueError(f"Incomplete benchmark phases or unequal sample counts: {key}")
 
 
 def load_metadata(result_dir):
@@ -168,24 +187,20 @@ def render_interpretation_guide():
     return """## Performance Interpretation Guide
 
 This benchmark isolates five fundamental phases of sorted container operations:
-- **Insert**: Time to insert $N$ keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
-- **Lookup Hit**: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
-- **Lookup Miss**: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
-- **Iterate**: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (e.g. flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
-- **Remove**: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time.
+- Insert: Time to insert $N$ keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.
+- Lookup hit: Time to query $N$ keys that exist in the container. Measures pointer indirection, cache locality, and branching.
+- Lookup miss: Time to query $N$ absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.
+- Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
+- Remove: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time.
 
-The lowest latency value for each operation column in the tables below is displayed in **bold**.
+The lowest latency value for each operation column in the tables below is displayed in bold.
 
 ### Key Architectural Comparisons
 
-1. **B-Trees versus Binary Trees**:
-   B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
-2. **Intrusive and Dedicated AVL Trees**:
-   Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.
-3. **Flat Arrays**:
-   Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
-4. **Java Boxed Collections versus Primitive Specialization**:
-   Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), demonstrating the true algorithmic capacity of the JVM without object wrappers.
+1. B-trees versus binary trees: B-trees (Ordered `BTreeMap`, Rust `BTreeMap`, Abseil `btree_map`, and Klib `kbtree`) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (`std::map`, Java `TreeMap`, and Zig `RedBlackTreeSet`).
+2. Intrusive and dedicated AVL trees: Klib `kavl` and fastutil `AVLTreeMap` use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.
+3. Flat arrays: Boost `flat_map` and `flat_set` store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements ($O(N)$ per operation), making large random mutation workloads expensive.
+4. Java boxed collections versus primitive specialization: Java's standard `TreeMap<Long, Long>` stores boxed object pointers, incurring substantial GC and pointer overhead. The `fastutil` collections operate directly on primitive 64-bit integers (`long`), demonstrating the true algorithmic capacity of the JVM without object wrappers.
 """
 
 
@@ -208,8 +223,10 @@ def format_html_metric(val, best_val):
 
 
 def render_chart_code(title, x_labels, values, y_label="Time (ns/op)"):
-    if not x_labels or not values:
+    points = [(label, value) for label, value in zip(x_labels, values) if value is not None]
+    if not points:
         return ""
+    x_labels, values = zip(*points)
     max_val = max(values)
     upper_bound = math.ceil(max_val * 1.15) if max_val > 0 else 10
     if upper_bound == 0:
@@ -218,7 +235,8 @@ def render_chart_code(title, x_labels, values, y_label="Time (ns/op)"):
     labels_str = ", ".join(f'"{lbl}"' for lbl in x_labels)
     values_str = ", ".join(f"{v:.2f}" for v in values)
 
-    return f"""xychart-beta
+    return f"""%%{{init: {{"xyChart": {{"width": 900, "height": 650, "xAxis": {{"labelRotation": 90, "labelPadding": 16}}}}}}}}%%
+xychart-beta
     title "{title}"
     x-axis [{labels_str}]
     y-axis "{y_label}" 0 --> {upper_bound}
@@ -327,8 +345,8 @@ def generate_report(records, metadata):
                 )
 
                 chart_labels.append(short_label)
-                chart_hit_values.append(phases.get("hit", 0.0))
-                chart_iter_values.append(phases.get("iterate", 0.0))
+                chart_hit_values.append(phases.get("hit"))
+                chart_iter_values.append(phases.get("iterate"))
 
             lines.append("\n".join(table_rows))
             lines.append("")
@@ -396,24 +414,24 @@ def render_html_interpretation_guide():
     <h2>Performance Interpretation Guide</h2>
     <p>This benchmark isolates five fundamental phases of sorted container operations:</p>
     <ul>
-      <li><strong>Insert:</strong> Time to insert <em>N</em> keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
-      <li><strong>Lookup Hit:</strong> Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
-      <li><strong>Lookup Miss:</strong> Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
-      <li><strong>Iterate:</strong> Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (e.g. flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
-      <li><strong>Remove:</strong> Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time.</li>
+      <li>Insert: Time to insert <em>N</em> keys into an initially empty container. For native implementations, this includes memory allocation. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
+      <li>Lookup hit: Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
+      <li>Lookup miss: Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
+      <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
+      <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time.</li>
     </ul>
-    <p>The lowest latency value for each operation column in the tables below is displayed in <strong>bold with a green highlight</strong>.</p>
+    <p>The lowest latency value for each operation column in the tables below is displayed with bold text and a green highlight.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
-      <li><strong>B-Trees versus Binary Trees:</strong> B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
-      <li><strong>Intrusive and Dedicated AVL Trees:</strong> Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.</li>
-      <li><strong>Flat Arrays:</strong> Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
-      <li><strong>Java Boxed Collections versus Primitive Specialization:</strong> Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), demonstrating the true algorithmic capacity of the JVM without object wrappers.</li>
+      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This lowers pointer chasing and improves cache locality compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
+      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. This leads to shorter branch heights than red-black trees, trading slightly slower insertions for faster lookups.</li>
+      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. Sorted iteration and lookups are fast, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
+      <li>Java boxed collections versus primitive specialization: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), demonstrating the true algorithmic capacity of the JVM without object wrappers.</li>
     </ol>
   </section>"""
 
 
-def generate_html_report(records, metadata):
+def generate_html_report(records, metadata, downloads=()):
     combos = sorted({(r["size"], r["order"]) for r in records})
 
     nav_links = [
@@ -519,6 +537,46 @@ def generate_html_report(records, metadata):
         "      font-variant-numeric: tabular-nums;",
         "      font-family: var(--font-mono);",
         "    }",
+        "    table.sortable th {",
+        "      padding: 0;",
+        "    }",
+        "    table.sortable th button {",
+        "      display: block;",
+        "      width: 100%;",
+        "      border: 0;",
+        "      background: transparent;",
+        "      color: inherit;",
+        "      font: inherit;",
+        "      text-align: inherit;",
+        "      padding: 0.75rem 1.5rem 0.75rem 1rem;",
+        "      cursor: pointer;",
+        "      user-select: none;",
+        "      position: relative;",
+        "    }",
+        "    table.sortable th:hover {",
+        "      background: var(--border);",
+        "    }",
+        "    table.sortable th button:focus-visible {",
+        "      outline: 2px solid var(--accent);",
+        "      outline-offset: -2px;",
+        "    }",
+        "    table.sortable th span::after {",
+        '      content: "↕";',
+        "      position: absolute;",
+        "      right: 0.5rem;",
+        "      opacity: 0.4;",
+        "      font-size: 0.75rem;",
+        "    }",
+        '    table.sortable th[aria-sort="ascending"] span::after {',
+        '      content: "▲";',
+        "      opacity: 1;",
+        "      color: var(--accent);",
+        "    }",
+        '    table.sortable th[aria-sort="descending"] span::after {',
+        '      content: "▼";',
+        "      opacity: 1;",
+        "      color: var(--accent);",
+        "    }",
         "    .best {",
         "      font-weight: 700;",
         "      color: var(--best-color);",
@@ -534,7 +592,8 @@ def generate_html_report(records, metadata):
         "      margin: 1rem 0 1.5rem;",
         "      overflow-x: auto;",
         "    }",
-        "    .mermaid { display: flex; justify-content: center; }",
+        # Flex layout collapses Mermaid's temporary SVG text measurements.
+        "    .mermaid { display: block; text-align: center; }",
         "    code {",
         "      font-family: var(--font-mono);",
         "      font-size: 0.85em;",
@@ -559,9 +618,8 @@ def generate_html_report(records, metadata):
         "      <p>This report provides structured comparison tables and visual charts generated from benchmark results.</p>",
         '      <div class="btn-group">',
         '        <a class="btn" href="REPORT.md" download>Download REPORT.md</a>',
-        '        <a class="btn" href="summary.csv" download>Download summary.csv</a>',
-        '        <a class="btn" href="samples.csv" download>Download samples.csv</a>',
-        '        <a class="btn" href="metadata.json" download>Download metadata.json</a>',
+        *(f'        <a class="btn" href="{filename}" download>Download {filename}</a>'
+          for filename in DOWNLOADS if filename in downloads),
         "      </div>",
         '      <div class="btn-group">',
         *nav_links,
@@ -615,17 +673,17 @@ def generate_html_report(records, metadata):
 
             table_rows = [
                 '        <div class="table-container">',
-                "          <table>",
+                '          <table class="sortable">',
                 "            <thead>",
                 "              <tr>",
-                "                <th>Language</th>",
-                "                <th>Implementation</th>",
-                "                <th>Data Structure</th>",
-                '                <th class="num">Insert (ns/op)</th>',
-                '                <th class="num">Lookup Hit (ns/op)</th>',
-                '                <th class="num">Lookup Miss (ns/op)</th>',
-                '                <th class="num">Iterate (ns/op)</th>',
-                '                <th class="num">Remove (ns/op)</th>',
+                '                <th><button type="button">Language<span aria-hidden="true"></span></button></th>',
+                '                <th><button type="button">Implementation<span aria-hidden="true"></span></button></th>',
+                '                <th><button type="button">Data Structure<span aria-hidden="true"></span></button></th>',
+                '                <th class="num"><button type="button">Insert (ns/op)<span aria-hidden="true"></span></button></th>',
+                '                <th class="num"><button type="button">Lookup Hit (ns/op)<span aria-hidden="true"></span></button></th>',
+                '                <th class="num"><button type="button">Lookup Miss (ns/op)<span aria-hidden="true"></span></button></th>',
+                '                <th class="num"><button type="button">Iterate (ns/op)<span aria-hidden="true"></span></button></th>',
+                '                <th class="num"><button type="button">Remove (ns/op)<span aria-hidden="true"></span></button></th>',
                 "              </tr>",
                 "            </thead>",
                 "            <tbody>",
@@ -660,8 +718,8 @@ def generate_html_report(records, metadata):
                 )
 
                 chart_labels.append(short_label)
-                chart_hit_values.append(phases.get("hit", 0.0))
-                chart_iter_values.append(phases.get("iterate", 0.0))
+                chart_hit_values.append(phases.get("hit"))
+                chart_iter_values.append(phases.get("iterate"))
 
             table_rows.extend([
                 "            </tbody>",
@@ -684,12 +742,51 @@ def generate_html_report(records, metadata):
         "      <p>Ordered Benchmarks Suite</p>",
         "    </footer>",
         "  </div>",
+        "  <script>",
+        "    document.querySelectorAll('table.sortable').forEach((table) => {",
+        "      const headers = table.querySelectorAll('thead th');",
+        "      const tbody = table.querySelector('tbody');",
+        "      if (!tbody) return;",
+        "      headers.forEach((th, colIndex) => {",
+        "        const sortColumn = () => {",
+        "          const currentSort = th.getAttribute('aria-sort');",
+        "          const nextSort = currentSort === 'ascending' ? 'descending' : 'ascending';",
+        "          headers.forEach((h) => h.removeAttribute('aria-sort'));",
+        "          th.setAttribute('aria-sort', nextSort);",
+        "          const isNum = th.classList.contains('num');",
+        "          const rows = Array.from(tbody.querySelectorAll('tr'));",
+        "          rows.sort((rowA, rowB) => {",
+        "            const cellA = rowA.cells[colIndex]?.textContent.trim() ?? '';",
+        "            const cellB = rowB.cells[colIndex]?.textContent.trim() ?? '';",
+        "            if (isNum) {",
+        "              const numA = cellA === '-' || cellA === '' ? Infinity : parseFloat(cellA.replace(/,/g, ''));",
+        "              const numB = cellB === '-' || cellB === '' ? Infinity : parseFloat(cellB.replace(/,/g, ''));",
+        "              const diff = (isNaN(numA) ? Infinity : numA) - (isNaN(numB) ? Infinity : numB);",
+        "              return nextSort === 'ascending' ? diff : -diff;",
+        "            }",
+        "            const comp = cellA.localeCompare(cellB, undefined, { numeric: true, sensitivity: 'base' });",
+        "            return nextSort === 'ascending' ? comp : -comp;",
+        "          });",
+        "          rows.forEach((row) => tbody.appendChild(row));",
+        "        };",
+        "        th.querySelector('button').addEventListener('click', sortColumn);",
+        "      });",
+        "    });",
+        "  </script>",
         '  <script type="module">',
         "    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';",
         "    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;",
         "    mermaid.initialize({",
         "      startOnLoad: true,",
-        "      theme: isDark ? 'dark' : 'neutral'",
+        "      theme: isDark ? 'dark' : 'neutral',",
+        "      xyChart: {",
+        "        width: 900,",
+        "        height: 650,",
+        "        xAxis: {",
+        "          labelRotation: 90,",
+        "          labelPadding: 16",
+        "        }",
+        "      }",
         "    });",
         "  </script>",
         "</body>",
@@ -706,16 +803,18 @@ def build_site(results_dir, site_dir):
     metadata = load_metadata(results_dir)
 
     report_md = generate_report(records, metadata)
-    report_html = generate_html_report(records, metadata)
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
 
     (site_dir / "index.html").write_text(report_html, encoding="utf-8")
     (site_dir / "REPORT.md").write_text(report_md, encoding="utf-8")
     (site_dir / ".nojekyll").write_text("", encoding="utf-8")
 
-    for filename in ("summary.csv", "samples.csv", "metadata.json", "flake.lock"):
+    for filename in DOWNLOADS:
         src = results_dir / filename
-        if src.exists():
+        if src.is_file():
             shutil.copyfile(src, site_dir / filename)
+        else:
+            (site_dir / filename).unlink(missing_ok=True)
 
 
 def main():
@@ -757,7 +856,7 @@ def main():
     in_dir_report.write_text(report_md, encoding="utf-8")
     print(f"Copy written to: {in_dir_report}")
 
-    report_html = generate_html_report(records, metadata)
+    report_html = generate_html_report(records, metadata, [name for name in DOWNLOADS if (results_dir / name).is_file()])
     in_dir_html = results_dir / "index.html"
     in_dir_html.write_text(report_html, encoding="utf-8")
     print(f"Copy written to: {in_dir_html}")

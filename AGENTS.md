@@ -24,11 +24,19 @@ Keep benchmark dependencies here. Do not modify Ordered as part of a benchmark c
 
 - Write in simple, plain English. Use short sentences and everyday words.
 - Use Oxford commas in inline lists: "a, b, and c" not "a, b, c".
-- Do not use em dashes. Restructure the sentence, or use a colon or semicolon instead.
-- Avoid colorful adjectives and adverbs. Write "vector quantization library" not "powerful vector quantization library".
-- Use noun phrases for checklist items, not imperative verbs. Write "distance metric coverage" not "cover distance metrics".
+- Do not use em dashes. Restructure the sentence, or use a semicolon instead. Use emojis scarcely.
+- Avoid colons in the middle of sentences. A colon that introduces a code block or a list is fine; existing text is reworded when it is touched anyway, not in a sweep.
+- Avoid colorful adjectives and adverbs. Write "adjacency query" not "blazing adjacency query".
+- Prefer noun phrases for checklist items over imperative verbs. Write "temp directory teardown" not "tear down the temp directory".
 - Headings in Markdown files must be in title case: "Build from Source" not "Build from source". Minor words (a, an, the, and, but, or, for, in, on,
   at, to, by, of, is, are, was, were, be) stay lowercase unless they are the first word.
+- Do not bold the lead-in of a list item. Write "Vector and set similarity: ..." not "Vector and set similarity: ...".
+- Use sentence case for the lead-in of a list item. Write "Seed selection: ..." not "Seed Selection: ...". Proper nouns keep their capitals.
+- Capitalize only the first part of a hyphenated compound: "Full-text Search" in a heading, "Breadth-first" at the start of a sentence, and "breadth-first search" elsewhere. Never write "Breadth-First".
+- Start each sentence with a capital letter, capitalize proper nouns (Rust, PostgreSQL, SvelteKit, TypeScript), and leave common nouns lowercase in the middle of a sentence.
+- Write correct and complete sentences.
+- Avoid made-up words and abbreviations.
+- Use participial phrases scarcely.
 
 ## Benchmark Contract
 
