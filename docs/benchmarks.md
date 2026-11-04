@@ -51,9 +51,9 @@ timings are exploratory and are not performance regression gates.
 New runs record the expected implementations, workloads, and sample identities.
 Report generation rejects missing groups, invalid timings, duplicate samples, and
 summary values that disagree with raw data. For older runs without a manifest,
-coverage is checked against recorded toolchains when available, or observed
-implementations otherwise. An entirely absent implementation cannot be detected
-from legacy files that lack both sources of coverage information.
+coverage is checked against observed implementations. Toolchain versions do not
+identify which adapters existed at the time of the run. An entirely absent
+implementation cannot be detected in legacy files without a manifest.
 
 Mixed operations and other key distributions remain separate workloads.
 This suite measures the existing integer container contract only.

@@ -273,7 +273,21 @@ def check(languages):
                             result = run(native_command(language, impl, data) + ["0", "1"],
                                          capture_output=True, text=True)
                             parse_native(result.stdout.strip())
-    print("All selected implementations passed edge fixtures.")
+        for phase in range(3):
+            arrays = [[0, 2, 4] for _ in range(3)]
+            arrays[phase] = [2, 2, 2]
+            data.write_bytes(struct.pack("<Q9q", 3, *(key for keys in arrays for key in keys)))
+            for language in languages:
+                commands = [["java", "-cp", ROOT / "benchmarks/java/target/benchmarks.jar",
+                             "bench.CollectionsBench", data]] if language == "java" else [
+                    native_command(language, impl, data) + ["0", "1"] for impl in IMPLS[language]]
+                for command in commands:
+                    try:
+                        run(command, capture_output=True, text=True)
+                    except subprocess.CalledProcessError:
+                        continue
+                    raise ValueError(f"Runner accepted duplicate keys in fixture array {phase}: {command}")
+    print("All selected implementations passed edge fixtures and rejected duplicate keys.")
 
 
 def main():

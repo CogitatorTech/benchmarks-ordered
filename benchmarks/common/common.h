@@ -34,11 +34,19 @@ static Dataset load(const char *path) {
     CHECK(data.insert != NULL);
     data.lookup = data.insert + n;
     data.remove = data.lookup + n;
-    for (size_t i = 0; i < n * 3; ++i) {
-        uint64_t key = read_u64(file);
-        CHECK(key < n * 2 && key % 2 == 0);
-        data.insert[i] = (int64_t) key;
+    unsigned char *seen = (unsigned char *) malloc(n + 1);
+    CHECK(seen != NULL);
+    for (size_t phase = 0; phase < 3; ++phase) {
+        memset(seen, 0, n);
+        for (size_t i = 0; i < n; ++i) {
+            uint64_t key = read_u64(file);
+            CHECK(key < n * 2 && key % 2 == 0);
+            CHECK(!seen[key / 2]);
+            seen[key / 2] = 1;
+            data.insert[phase * n + i] = (int64_t) key;
+        }
     }
+    free(seen);
     CHECK(fgetc(file) == EOF && !ferror(file));
     CHECK(fclose(file) == 0);
     return data;

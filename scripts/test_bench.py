@@ -97,6 +97,13 @@ class HarnessTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises((ValueError, csv.Error)):
                 bench.parse_native(bad)
 
+    def test_correctness_checks_reject_a_runner_that_accepts_duplicate_keys(self):
+        output = "\n".join(f"{phase},10" for phase in bench.PHASES)
+        with patch.object(bench, "IMPLS", {"rust": ["btree_map"]}), \
+            patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)):
+            with self.assertRaisesRegex(ValueError, "accepted duplicate keys"):
+                bench.check(["rust"])
+
     def test_jmh_samples_and_validation(self):
         results = [{"benchmark": "bench.CollectionsBench." + phase,
                     "primaryMetric": {"scoreUnit": "ns/op", "rawData": [[10, 20], [30, 40]]}}

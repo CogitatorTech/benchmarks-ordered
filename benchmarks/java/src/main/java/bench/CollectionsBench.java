@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
@@ -65,22 +66,25 @@ public class CollectionsBench {
         rawLookup = new long[size];
         rawAbsent = new long[size];
         rawRemoval = new long[size];
+        boolean[] seen = new boolean[size];
         for (int i = 0; i < size; i++) {
-            long k = readKey(data);
+            long k = readKey(data, seen);
             rawInsertion[i] = k;
             rawValues[i] = k + 1;
             insertion[i] = k;
             values[i] = rawValues[i];
         }
+        Arrays.fill(seen, false);
         for (int i = 0; i < size; i++) {
-            long k = readKey(data);
+            long k = readKey(data, seen);
             rawLookup[i] = k;
             rawAbsent[i] = k + 1;
             lookup[i] = k;
             absent[i] = rawAbsent[i];
         }
+        Arrays.fill(seen, false);
         for (int i = 0; i < size; i++) {
-            long k = readKey(data);
+            long k = readKey(data, seen);
             rawRemoval[i] = k;
             removal[i] = k;
         }
@@ -115,9 +119,12 @@ public class CollectionsBench {
         }
     }
 
-    private long readKey(ByteBuffer data) {
+    private long readKey(ByteBuffer data, boolean[] seen) {
         long key = data.getLong();
         check(key >= 0 && key < size * 2L && key % 2 == 0);
+        int index = (int) (key / 2);
+        check(!seen[index]);
+        seen[index] = true;
         return key;
     }
 

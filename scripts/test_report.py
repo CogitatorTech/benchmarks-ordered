@@ -121,6 +121,15 @@ class ReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "configuration"):
             report.validate_records(records, meta)
 
+    def test_legacy_toolchains_do_not_require_new_implementations(self):
+        records = [dict(language="rust", implementation="btree_map", kind="map", size=10,
+                        order="ascending", phase=phase, samples=1, min_ns_per_op=2,
+                        median_ns_per_op=2, max_ns_per_op=2) for phase in report.PHASES]
+        report.validate_records(records, {"versions": {"rust": "historical rustc"}})
+        with self.assertRaisesRegex(ValueError, "coverage"):
+            report.validate_records(records, {"implementations": {
+                "rust": ["btree_map", "btree_set"]}})
+
     def test_report_spread_filters_scaling_and_provenance(self):
         records = [dict(language="rust", implementation="btree_map", kind="map", size=size,
                         order="ascending", seed=seed, phase=phase, samples=4,

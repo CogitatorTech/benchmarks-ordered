@@ -10,8 +10,6 @@ import statistics
 import sys
 from pathlib import Path
 
-from bench import IMPLS
-
 ROOT = Path(__file__).resolve().parents[1]
 
 STRUCTURE_MAP = {
@@ -173,8 +171,6 @@ def validate_records(records, metadata=None):
             raise ValueError(f"Unequal sample identities: {key}")
     meta = metadata or {}
     implementations = meta.get("implementations")
-    if implementations is None and meta.get("versions"):
-        implementations = {lang: IMPLS[lang] for lang in meta["versions"] if lang in IMPLS}
     if implementations is None:
         implementations = {}
         for language, implementation, *_ in groups:

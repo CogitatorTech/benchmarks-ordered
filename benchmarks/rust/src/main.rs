@@ -195,6 +195,15 @@ fn main() {
         keys.iter()
             .all(|&k| k >= 0 && k < n as i64 * 2 && k % 2 == 0)
     );
+    let mut seen = vec![false; n];
+    for phase in 0..3 {
+        seen.fill(false);
+        for &key in &keys[phase * n..(phase + 1) * n] {
+            let index = key as usize / 2;
+            assert!(!seen[index], "duplicate fixture key");
+            seen[index] = true;
+        }
+    }
     let warmups: usize = args[3].parse().unwrap();
     let samples: usize = args[4].parse().unwrap();
     assert!(warmups <= 1000 && samples > 0 && samples <= 1000);
