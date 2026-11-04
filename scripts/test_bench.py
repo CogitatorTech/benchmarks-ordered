@@ -26,6 +26,34 @@ class HarnessTests(unittest.TestCase):
             bench.fixture(path, 31, "ascending")
             self.assertEqual(struct.unpack_from("<31q", path.read_bytes(), 8), tuple(range(0, 62, 2)))
 
+    def test_fixture_seeds_change_all_permutations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.bin"
+            arrays = []
+            for seed in (42, 123):
+                bench.fixture(path, 31, "shuffled", seed)
+                arrays.append([struct.unpack_from("<31q", path.read_bytes(), 8 + i * 31 * 8) for i in range(3)])
+            for first, second in zip(*arrays):
+                self.assertNotEqual(first, second)
+                self.assertEqual(sorted(first), sorted(second))
+
+    def test_randomized_rounds_preserve_fork_and_seed_identity(self):
+        output = "\n".join(f"{phase},10" for phase in bench.PHASES)
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(sizes="2", output=str(Path(directory) / "results"),
+                                   warmups=0, samples=1, forks=3, seeds="42,123", cpu=None, schedule_seed=1729)
+            with patch.object(bench, "require_env"), patch.object(bench, "metadata", return_value={}), \
+                 patch.object(bench, "IMPLS", {"rust": ["btree_map", "btree_set"]}), \
+                 patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)) as runner:
+                bench.bench(args, ["rust"])
+            jobs = [call.args[0][1] for call in runner.call_args_list]
+            self.assertGreater(len({tuple(jobs[i:i + 2]) for i in range(0, len(jobs), 2)}), 1)
+            import report
+            records = report.load_records(Path(args.output))
+            self.assertEqual(len(records), 40)
+            self.assertEqual({r["seed"] for r in records}, {42, 123})
+            self.assertTrue(all(r["forks"] == 3 for r in records))
+
     def test_empty_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fixture.bin"
@@ -70,7 +98,7 @@ class HarnessTests(unittest.TestCase):
         output = "\n".join(f"{phase},10" for phase in bench.PHASES)
         with tempfile.TemporaryDirectory() as directory:
             args = SimpleNamespace(sizes="1", output=str(Path(directory) / "success"),
-                                   warmups=0, samples=1, forks=1)
+                                   warmups=0, samples=1, forks=1, seeds="42", cpu=None, schedule_seed=1729)
             with patch.object(bench, "require_env"), patch.object(bench, "metadata", return_value={}), \
                  patch.object(bench, "IMPLS", {"rust": ["btree_map"]}), \
                  patch.object(bench, "run", return_value=SimpleNamespace(stdout=output)):

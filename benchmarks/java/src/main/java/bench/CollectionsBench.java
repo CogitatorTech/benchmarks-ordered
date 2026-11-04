@@ -193,8 +193,8 @@ public class CollectionsBench {
     private void preparePhase(String name) {
         phase = name;
         result = Long.MIN_VALUE;
-        fresh();
         if (!phase.equals("insert")) {
+            fresh();
             populate();
             validate();
         }
@@ -202,6 +202,7 @@ public class CollectionsBench {
 
     @Benchmark
     public long insert() {
+        fresh();
         populate();
         return result = isFastutil ? (isSet ? fastSet.size() : fastMap.size()) : (isSet ? set.size() : map.size());
     }

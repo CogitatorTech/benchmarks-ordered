@@ -88,10 +88,10 @@ class ReportTests(unittest.TestCase):
 
     def test_validate_records(self):
         records = [dict(language="zig", implementation="btree_map", kind="map", size=1000,
-                        order="ascending", phase=phase, samples=2) for phase in report.PHASES]
+                        order="ascending", phase=phase, samples=2, min_ns_per_op=1, median_ns_per_op=2, max_ns_per_op=3) for phase in report.PHASES]
         report.validate_records(records)
         bad_cases = [[], records[:-1], records + records[:1]]
-        for field, value in (("phase", "unknown"), ("samples", 0), ("samples", 1)):
+        for field, value in (("phase", "unknown"), ("samples", 0), ("samples", 1), ("median_ns_per_op", float("nan")), ("min_ns_per_op", -1), ("max_ns_per_op", 1), ("size", 0), ("kind", "invalid")):
             bad = copy.deepcopy(records)
             bad[0][field] = value
             bad_cases.append(bad)
@@ -99,10 +99,84 @@ class ReportTests(unittest.TestCase):
             with self.subTest(records=bad), self.assertRaises(ValueError):
                 report.validate_records(bad)
 
+    def test_manifest_detects_missing_implementation_and_sample_identity(self):
+        records = [dict(language="rust", implementation="btree_map", kind="map", size=10,
+                        order="ascending", seed=123, phase=phase, samples=2,
+                        min_ns_per_op=1, median_ns_per_op=2, max_ns_per_op=3,
+                        sample_ids={(0, 0), (1, 0)}) for phase in report.PHASES]
+        meta = dict(implementations={"rust": ["btree_map"]}, sizes=[10], orders=["ascending"],
+                    seeds=[123], forks=2, samples_per_fork=1)
+        report.validate_records(records, meta)
+        meta["implementations"]["rust"].append("btree_set")
+        with self.assertRaisesRegex(ValueError, "coverage"):
+            report.validate_records(records, meta)
+        meta["implementations"]["rust"].pop()
+        for row in records:
+            row["sample_ids"] = {(0, 0), (0, 1)}
+        with self.assertRaisesRegex(ValueError, "configuration"):
+            report.validate_records(records, meta)
+
+    def test_report_spread_filters_scaling_and_provenance(self):
+        records = [dict(language="rust", implementation="btree_map", kind="map", size=size,
+                        order="ascending", seed=seed, phase=phase, samples=4,
+                        min_ns_per_op=1, median_ns_per_op=2, max_ns_per_op=3,
+                        q1=1.5, q3=2.5, forks=2, fork_medians=[1.5, 2.5])
+                   for size in (10, 100) for seed in (42, 123) for phase in report.PHASES]
+        meta = dict(dirty=True, affinity=[2], ordered_source="/local/ordered", runner_environment="GitHub-hosted CI")
+        markdown = report.generate_report(records, meta)
+        output = report.generate_html_report(records, meta)
+        for content in (markdown, output):
+            self.assertIn("IQR 1.50–2.50; 4 samples; 2 forks", content)
+            self.assertIn("fork medians [1.50, 2.50]", content)
+            self.assertIn("GitHub-hosted CI", content)
+            self.assertIn("/local/ordered", content)
+            self.assertIn("line [2.00, 2.00]", content)
+            self.assertIn("Seed 123", content)
+            for phase in report.PHASES:
+                self.assertIn(phase.title() + " Scaling", content)
+        for name in ("phase", "kind", "order"):
+            self.assertIn(f'id="{name}-filter"', output)
+        self.assertIn("cell.hidden =", output)
+
+    def test_raw_samples_reject_duplicates_and_nonfinite_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            header = "language,implementation,kind,size,order,phase,fork,sample,ns_per_op\n"
+            rows = "".join(f"rust,btree_map,map,10,ascending,{phase},0,0,2\n" for phase in report.PHASES)
+            (path / "samples.csv").write_text(header + rows)
+            self.assertEqual(report.load_records(path)[0]["fork_medians"], [2])
+            for invalid in (rows + rows.splitlines()[0] + "\n", rows.replace(",2\n", ",nan\n")):
+                (path / "samples.csv").write_text(header + invalid)
+                with self.assertRaises(ValueError):
+                    report.load_records(path)
+            (path / "metadata.json").write_text("broken")
+            with self.assertRaises(json.JSONDecodeError):
+                report.load_metadata(path)
+
+    def test_summary_must_agree_with_raw_samples(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            with (path / "summary.csv").open("w", newline="") as source:
+                writer = csv.writer(source)
+                writer.writerow(["language", "implementation", "kind", "size", "order", "phase", "median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
+                for phase in report.PHASES:
+                    writer.writerow(["rust", "btree_map", "map", 10, "ascending", phase, 2, 2, 2, 1])
+            header = "language,implementation,kind,size,order,phase,fork,sample,ns_per_op\n"
+            rows = "".join(f"rust,btree_map,map,10,ascending,{phase},0,0,3\n" for phase in report.PHASES)
+            (path / "samples.csv").write_text(header + rows)
+            with self.assertRaisesRegex(ValueError, "disagree"):
+                report.load_records(path)
+            (path / "samples.csv").write_text(header + rows.replace(",3\n", ",2\n"))
+            report.load_records(path)
+            (path / "samples.csv").write_text(header + rows.replace("btree_map", "btree_set").replace(",map,", ",set,"))
+            with self.assertRaisesRegex(ValueError, "coverage differ"):
+                report.load_records(path)
+
     def test_format_metric(self):
         self.assertEqual(report.format_metric(10.5, 10.5), "**10.50**")
         self.assertEqual(report.format_metric(15.2, 10.5), "15.20")
         self.assertEqual(report.format_metric(None, 10.5), "-")
+        self.assertEqual(report.format_metric(10.501, 10.5), "10.50")
 
     def test_render_chart(self):
         chart = report.render_chart("Test Chart", ["A", "B"], [10.5, 20.2])
@@ -299,7 +373,12 @@ class ReportTests(unittest.TestCase):
                 for phase in report.PHASES:
                     writer.writerow(["zig", "btree_map", "map", 1000, "ascending", phase, 20.5, 19, 22, 3])
             (res_dir / "metadata.json").write_text(json.dumps({"cpu": "Test CPU"}))
-            (res_dir / "samples.csv").write_text("header\n")
+            with (res_dir / "samples.csv").open("w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["language", "implementation", "kind", "size", "order", "phase", "fork", "sample", "ns_per_op"])
+                for phase in report.PHASES:
+                    for sample, value in enumerate((19, 20.5, 22)):
+                        writer.writerow(["zig", "btree_map", "map", 1000, "ascending", phase, 0, sample, value])
 
             report.build_site(res_dir, site_dir)
 

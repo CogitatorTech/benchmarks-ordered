@@ -32,15 +32,15 @@ def run(cmd, **kwargs):
     return subprocess.run([str(x) for x in cmd], check=True, **kwargs)
 
 
-def fixture(path, size, order):
+def fixture(path, size, order, seed=42):
     """The file is little-endian u64 count followed by three i64 key arrays."""
     insertion = list(range(0, size * 2, 2))
     if order == "shuffled":
-        random.Random(42).shuffle(insertion)
+        random.Random(seed).shuffle(insertion)
     lookup = list(range(0, size * 2, 2))
     removal = lookup.copy()
-    random.Random(43).shuffle(lookup)
-    random.Random(44).shuffle(removal)
+    random.Random(seed + 1).shuffle(lookup)
+    random.Random(seed + 2).shuffle(removal)
     with path.open("wb") as out:
         out.write(struct.pack("<Q", size))
         for keys in (insertion, lookup, removal):
@@ -143,57 +143,67 @@ def metadata(languages):
 def bench(args, languages):
     require_env()
     sizes = [int(n) for n in args.sizes.split(",")]
+    seeds = [int(n) for n in args.seeds.split(",")]
+    if not seeds or len(set(seeds)) != len(seeds) or len(set(sizes)) != len(sizes):
+        raise ValueError("Sizes and seeds must be unique")
+    if args.cpu is not None:
+        os.sched_setaffinity(0, {args.cpu})
     if any(n <= 0 or n > 10_000_000 for n in sizes):
         raise ValueError("Sizes must be between 1 and 10000000")
     dest = Path(args.output or ROOT / "results" / time.strftime("%Y%m%d-%H%M%S"))
     dest.mkdir(parents=True, exist_ok=False)
-    (dest / "metadata.json").write_text(json.dumps(metadata(languages), indent=2) + "\n")
+    meta = metadata(languages)
+    meta.update({"schema_version": 2, "implementations": {lang: IMPLS[lang] for lang in languages},
+                 "sizes": sizes, "orders": ["ascending", "shuffled"], "seeds": seeds,
+                 "samples_per_fork": args.samples, "forks": args.forks,
+                 "warmups": {lang: args.warmups if args.warmups is not None else (20 if lang == "java" else 3) for lang in languages},
+                 "schedule_seed": args.schedule_seed,
+                 "runner_environment": "GitHub-hosted CI" if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted" else ("CI" if os.environ.get("CI") else "local")})
+    (dest / "metadata.json").write_text(json.dumps(meta, indent=2) + "\n")
     shutil.copyfile(ROOT / "flake.lock", dest / "flake.lock")
     samples = []
     with (dest / "samples.csv").open("w", newline="") as out:
         writer = csv.writer(out)
-        header = ["language", "implementation", "kind", "size", "order", "phase", "fork", "sample", "ns_per_op"]
+        header = ["language", "implementation", "kind", "size", "order", "seed", "phase", "fork", "sample", "ns_per_op"]
         writer.writerow(header)
+        schedule = random.Random(args.schedule_seed)
         for size in sizes:
             for order in ("ascending", "shuffled"):
-                data = dest / f"{size}-{order}.bin"
-                fixture(data, size, order)
-                (dest / f"{size}-{order}.sha256").write_text(hashlib.sha256(data.read_bytes()).hexdigest() + "\n")
-                for language in languages:
-                    warmups = args.warmups if args.warmups is not None else (20 if language == "java" else 3)
-                    for impl in IMPLS[language]:
-                        kind = "set" if impl.endswith("set") else "map"
-                        print(f"{language} {impl} {size} {order}", flush=True)
-                        if language == "java":
-                            result = dest / f"jmh-{impl}-{size}-{order}.json"
-                            cmd = ["java", "-jar", ROOT / "benchmarks/java/target/benchmarks.jar", "bench.CollectionsBench.*", "-p", "implementation=" + impl, "-p", "fixture=" + str(data.resolve()), "-f", str(args.forks), "-wi", str(warmups), "-i", str(args.samples), "-rff", result, "-rf", "json", "-foe", "true"]
-                            with (dest / f"jmh-{impl}-{size}-{order}.log").open("w") as log:
-                                run(cmd, stdout=log, stderr=subprocess.STDOUT)
-                            results = json.loads(result.read_text())
-                            for phase, fork, sample, ns in jmh_samples(results, args.forks, args.samples):
-                                row = [language, impl, kind, size, order, phase, fork, sample, ns / size]
-                                writer.writerow(row)
-                                samples.append(row)
-                        else:
-                            # A process is a fork; warmups and measurements run inside it.
-                            cmd = native_command(language, impl, data) + [str(warmups), str(args.samples)]
-                            for fork in range(args.forks):
+                for seed in seeds:
+                    data = dest / f"{size}-{order}-{seed}.bin"
+                    fixture(data, size, order, seed)
+                    data.with_suffix(".sha256").write_text(hashlib.sha256(data.read_bytes()).hexdigest() + "\n")
+                    for fork in range(args.forks):
+                        jobs = [(lang, impl) for lang in languages for impl in IMPLS[lang]]
+                        schedule.shuffle(jobs)
+                        for language, impl in jobs:
+                            warmups = meta["warmups"][language]
+                            kind = "set" if impl.endswith("set") else "map"
+                            print(f"{language} {impl} {size} {order} seed={seed} fork={fork}", flush=True)
+                            if language == "java":
+                                result = dest / f"jmh-{impl}-{size}-{order}-{seed}-{fork}.json"
+                                cmd = ["java", "-jar", ROOT / "benchmarks/java/target/benchmarks.jar", "bench.CollectionsBench.*", "-p", "implementation=" + impl, "-p", "fixture=" + str(data.resolve()), "-f", "1", "-wi", str(warmups), "-i", str(args.samples), "-rff", result, "-rf", "json", "-foe", "true"]
+                                with result.with_suffix(".log").open("w") as log:
+                                    run(cmd, stdout=log, stderr=subprocess.STDOUT)
+                                measurements = [(phase, sample, ns) for phase, _, sample, ns in jmh_samples(json.loads(result.read_text()), 1, args.samples)]
+                            else:
+                                cmd = native_command(language, impl, data) + [str(warmups), str(args.samples)]
                                 result = run(cmd, capture_output=True, text=True)
                                 chunks = result.stdout.strip().split("\n\n")
                                 if len(chunks) != args.samples:
                                     raise ValueError("Unexpected native sample count")
-                                for sample, chunk in enumerate(chunks):
-                                    for phase, ns in parse_native(chunk).items():
-                                        row = [language, impl, kind, size, order, phase, fork, sample, ns / size]
-                                        writer.writerow(row)
-                                        samples.append(row)
-                        out.flush()
+                                measurements = [(phase, sample, ns) for sample, chunk in enumerate(chunks) for phase, ns in parse_native(chunk).items()]
+                            for phase, sample, ns in measurements:
+                                row = [language, impl, kind, size, order, seed, phase, fork, sample, ns / size]
+                                writer.writerow(row)
+                                samples.append(row)
+                            out.flush()
     groups = {}
     for row in samples:
-        groups.setdefault(tuple(row[:6]), []).append(row[-1])
+        groups.setdefault(tuple(row[:7]), []).append(row[-1])
     with (dest / "summary.csv.tmp").open("w", newline="") as out:
         writer = csv.writer(out)
-        writer.writerow(header[:6] + ["median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
+        writer.writerow(header[:7] + ["median_ns_per_op", "min_ns_per_op", "max_ns_per_op", "samples"])
         for key, values in groups.items():
             writer.writerow([*key, statistics.median(values), min(values), max(values), len(values)])
     (dest / "summary.csv.tmp").replace(dest / "summary.csv")
@@ -221,7 +231,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "test", "bench"))
     parser.add_argument("--languages", default=",".join(IMPLS))
-    parser.add_argument("--sizes", default="1000,100000,1000000")
+    parser.add_argument("--sizes", default="1000,10000,100000,300000,1000000")
+    parser.add_argument("--seeds", default="42,123,2026", help="Fixture seeds, kept separate in reports")
+    parser.add_argument("--schedule-seed", type=int, default=1729)
+    parser.add_argument("--cpu", type=int, help="Pin runners to an allowed CPU on Linux")
     parser.add_argument("--warmups", type=int, help="Override native (3) and Java (20) warmup counts")
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--forks", type=int, default=2)
