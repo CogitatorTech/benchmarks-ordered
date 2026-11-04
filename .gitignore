@@ -104,3 +104,4 @@ docs/api/
 .claude/
 zig-pkg/
 REPORT.md
+site/
