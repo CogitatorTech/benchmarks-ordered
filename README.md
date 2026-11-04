@@ -44,9 +44,9 @@ make build
 make bench # This may take a while
 ```
 
-The results of the benchmarks are stored in the `results/` directory.
+The (raw) results of the benchmarks are stored in the `results/` directory.
 
-#### 4. Generate reports (optional)
+#### 4. Generate the performance report (optional)
 
 ```bash
 make report
