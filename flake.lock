@@ -67,17 +67,17 @@
     "ordered": {
       "flake": false,
       "locked": {
-        "lastModified": 1792959608,
-        "narHash": "sha256-Mifmp/llpvX9wfT0nk5vPBvL5GrASmY0VJjsz/o6uzc=",
+        "lastModified": 1793899826,
+        "narHash": "sha256-pszTfMvEQFmUS+XDfuGn7m0DhIma02ltqiSz9bDo4dQ=",
         "owner": "CogitatorTech",
         "repo": "ordered",
-        "rev": "864d82da5cc060e668cb4fb9c0de5450fcf47985",
+        "rev": "5f4642563b9d0624ec38500e43a110ce0bdde173",
         "type": "github"
       },
       "original": {
         "owner": "CogitatorTech",
         "repo": "ordered",
-        "rev": "864d82da5cc060e668cb4fb9c0de5450fcf47985",
+        "rev": "5f4642563b9d0624ec38500e43a110ce0bdde173",
         "type": "github"
       }
     },

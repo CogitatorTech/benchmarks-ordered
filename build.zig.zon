@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .ordered = .{
-            .url = "git+https://github.com/CogitatorTech/ordered.git#864d82da5cc060e668cb4fb9c0de5450fcf47985",
-            .hash = "ordered-0.3.1-Gy41sESfAgBfT7YmlunnfbKOdhdfC0SvZDDylfmjIbp2",
+            .url = "git+https://github.com/CogitatorTech/ordered.git#5f4642563b9d0624ec38500e43a110ce0bdde173",
+            .hash = "ordered-0.3.2-Gy41sCOlAgAT_AYvuIjHEA8B1AiyIvaVyDXR4zbEah44",
             .lazy = true,
         },
     },

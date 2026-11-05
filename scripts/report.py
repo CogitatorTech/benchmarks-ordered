@@ -50,6 +50,17 @@ STRUCTURE_MAP = {
 
 PHASES = ("insert", "hit", "miss", "iterate", "remove")
 DOWNLOADS = ("summary.csv", "samples.csv", "metadata.json", "flake.lock")
+LANGUAGE_NAMES = {
+    "c": "C",
+    "cpp": "C++",
+    "java": "Java",
+    "rust": "Rust",
+    "zig": "Zig",
+}
+
+
+def format_language(lang):
+    return LANGUAGE_NAMES.get(lang, lang.capitalize() if lang else "")
 
 
 def find_latest_results(base_dir=None):
@@ -251,7 +262,7 @@ def render_environment(meta):
     versions = meta.get("versions", {})
     if versions:
         version_summary = ", ".join(
-            f"{lang}: {ver.splitlines()[0]}" for lang, ver in versions.items()
+            f"{format_language(lang)}: {ver.splitlines()[0]}" for lang, ver in versions.items()
         )
         lines.append(f"| Toolchain Versions | {version_summary} |")
 
@@ -272,7 +283,7 @@ Ascending and shuffled describe insertion order only. Lookup and removal use ind
 - **Iterate**: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).
 - **Remove**: Time to remove all $N$ keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.
 
-Bold values mark the lowest measured median, not a proven winner. Cells show sample IQR and fork medians when raw data is available. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.
+Bold values mark the lowest measured median, not a proven winner.
 
 ### Architectural Comparisons
 
@@ -387,10 +398,6 @@ def generate_report(records, metadata):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
-            details = {
-                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
-                    spread_text(r)) + "</small>"
-                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
@@ -424,23 +431,18 @@ def generate_report(records, metadata):
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
                 insert_str = format_metric(phases.get("insert"), best_by_phase.get("insert"),
-                                           runners_up_by_phase.get("insert")) + details.get(
-                    (lang, impl, "insert"), "")
+                                           runners_up_by_phase.get("insert"))
                 hit_str = format_metric(phases.get("hit"), best_by_phase.get("hit"),
-                                        runners_up_by_phase.get("hit")) + details.get(
-                    (lang, impl, "hit"), "")
+                                        runners_up_by_phase.get("hit"))
                 miss_str = format_metric(phases.get("miss"), best_by_phase.get("miss"),
-                                         runners_up_by_phase.get("miss")) + details.get(
-                    (lang, impl, "miss"), "")
+                                         runners_up_by_phase.get("miss"))
                 iter_str = format_metric(phases.get("iterate"), best_by_phase.get("iterate"),
-                                         runners_up_by_phase.get("iterate")) + details.get(
-                    (lang, impl, "iterate"), "")
+                                         runners_up_by_phase.get("iterate"))
                 remove_str = format_metric(phases.get("remove"), best_by_phase.get("remove"),
-                                           runners_up_by_phase.get("remove")) + details.get(
-                    (lang, impl, "remove"), "")
+                                           runners_up_by_phase.get("remove"))
 
                 table_rows.append(
-                    f"| {lang} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"
+                    f"| {format_language(lang)} | {friendly_name} | {structure} | {insert_str} | {hit_str} | {miss_str} | {iter_str} | {remove_str} |"
                 )
 
                 chart_labels.append(short_label)
@@ -454,9 +456,6 @@ def generate_report(records, metadata):
                 chart = render_chart(title, chart_labels, values)
                 lines.append(chart)
 
-    lines.extend(["## Latency by Dataset Size", "",
-                  "The x-axis shows element counts with equal spacing between measured sizes.", "",
-                  scaling_charts(records)])
     return "\n".join(lines)
 
 
@@ -471,7 +470,7 @@ def scaling_charts(records, as_html=False):
         rows.sort(key=lambda r: r["size"])
         if len(rows) < 2:
             continue
-        title = f"{language} {impl} {phase.title()} Scaling ({order}, Seed {seed})"
+        title = f"{format_language(language)} {impl} {phase.title()} Scaling ({order}, Seed {seed})"
         code = render_chart_code(title, [str(r["size"]) for r in rows],
                                  [r["median_ns_per_op"] for r in rows]).replace("    bar [",
                                                                                 "    line [")
@@ -509,7 +508,7 @@ def render_html_environment(meta):
     versions = meta.get("versions", {})
     if versions:
         version_summary = ", ".join(
-            f"{lang}: {ver.splitlines()[0]}" for lang, ver in versions.items()
+            f"{format_language(lang)}: {ver.splitlines()[0]}" for lang, ver in versions.items()
         )
         rows.append(("Toolchain Versions", html.escape(version_summary)))
 
@@ -539,19 +538,19 @@ def render_html_interpretation_guide():
     <h2>Performance Interpretation Guide</h2>
     <p>Ascending and shuffled describe insertion order only. Lookup and removal use independent shuffled permutations. Containers are populated and validated before read and removal phases, so these measure recently accessed data. CI timings are exploratory; publish comparisons from a dedicated idle machine with recorded CPU affinity. This benchmark isolates five phases of sorted container operations:</p>
     <ul>
-      <li>Insert: Time to insert <em>N</em> keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
-      <li>Lookup hit: Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
-      <li>Lookup miss: Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
-      <li>Iterate: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
-      <li>Remove: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
+      <li><strong>Insert</strong>: Time to insert <em>N</em> keys into an initially empty container. Container construction and node allocation are included in new runs. Legacy Java runs excluded empty container construction. For ascending input, sequential B-tree optimizations are highlighted; for shuffled input, balancing overhead is tested.</li>
+      <li><strong>Lookup hit</strong>: Time to query <em>N</em> keys that exist in the container. Measures pointer indirection, cache locality, and branching.</li>
+      <li><strong>Lookup miss</strong>: Time to query <em>N</em> absent keys interleaved between existing keys. Tests traversal depth and early exit efficiency.</li>
+      <li><strong>Iterate</strong>: Time to perform an in-order scan across all elements. Highlights cache line density and memory locality (for example, flat arrays and B-tree leaf nodes versus pointer-chasing binary trees).</li>
+      <li><strong>Remove</strong>: Time to remove all <em>N</em> keys until the container is empty. Native runners include node deallocation time. Java removal unlinks entries and does not force garbage collection.</li>
     </ul>
-    <p>Bold green values mark the lowest measured median, and light orange values mark the next two lowest medians, not proven winners. Cells show sample IQR, sample counts, fork counts, and fork medians. These describe spread, not confidence intervals. Samples within a fork are not independent process runs.</p>
+    <p><strong class="best">Bold green</strong> values mark the lowest measured median, and <strong class="runner-up">light orange</strong> values mark the next two lowest medians, not proven winners.</p>
     <h3>Key Architectural Comparisons</h3>
     <ol>
-      <li>B-trees versus binary trees: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
-      <li>Intrusive and dedicated AVL trees: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.</li>
-      <li>Flat arrays: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
-      <li>Java boxed collections versus primitive specialization: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.</li>
+      <li><strong>B-trees versus binary trees</strong>: B-trees (Ordered <code>BTreeMap</code>, Rust <code>BTreeMap</code>, Abseil <code>btree_map</code>, and Klib <code>kbtree</code>) pack multiple keys per node. This can reduce pointer chasing compared to node-allocated trees (<code>std::map</code>, Java <code>TreeMap</code>, and Zig <code>RedBlackTreeSet</code>).</li>
+      <li><strong>Intrusive and dedicated AVL trees</strong>: Klib <code>kavl</code> and fastutil <code>AVLTreeMap</code> use strict AVL height balancing. Their balance rules differ from red-black trees. Measured latency also depends on node layout, allocation, and input.</li>
+      <li><strong>Flat arrays</strong>: Boost <code>flat_map</code> and <code>flat_set</code> store elements in contiguous sorted memory. The layout can benefit reads, but random insertions and removals require shifting elements (<em>O(N)</em> per operation), making large random mutation workloads expensive.</li>
+      <li><strong>Java boxed collections versus primitive specialization</strong>: Java's standard <code>TreeMap&lt;Long, Long&gt;</code> stores boxed object pointers, incurring substantial GC and pointer overhead. The <code>fastutil</code> collections operate directly on primitive 64-bit integers (<code>long</code>), avoiding boxed key and value storage. Boxed inputs are prepared outside timers, so boxing allocation cost is excluded.</li>
     </ol>
   </section>"""
 
@@ -663,7 +662,6 @@ def generate_html_report(records, metadata, downloads=()):
         "    th { background: var(--table-header); font-weight: 600; }",
         "    tr:nth-child(even) td { background: var(--table-stripe); }",
         "    tr:last-child td { border-bottom: none; }",
-        "    td small { display: block; min-width: 11rem; color: var(--text-muted); font-size: 0.7rem; }",
         "    [hidden] { display: none !important; }",
         "    td.num, th.num {",
         "      text-align: right;",
@@ -723,6 +721,9 @@ def generate_html_report(records, metadata, downloads=()):
         "      background: var(--runner-up-bg);",
         "      padding: 0.15rem 0.35rem;",
         "      border-radius: 4px;",
+        "    }",
+        "    strong.runner-up {",
+        "      font-weight: 700;",
         "    }",
         "    .chart-card {",
         "      background: var(--card-bg);",
@@ -806,10 +807,6 @@ def generate_html_report(records, metadata, downloads=()):
                 key = (r["language"], r["implementation"])
                 by_impl.setdefault(key, {})[r["phase"]] = r["median_ns_per_op"]
 
-            details = {
-                (r["language"], r["implementation"], r["phase"]): "<br><small>" + html.escape(
-                    spread_text(r)) + "</small>"
-                for r in matching if "q1" in r or r.get("summary_only")}
             sorted_impls = sorted(by_impl.keys(), key=lambda k: (k[0], k[1]))
 
             best_by_phase = {}
@@ -855,15 +852,15 @@ def generate_html_report(records, metadata, downloads=()):
                 structure = mapping[1]
                 short_label = mapping[2] if len(mapping) > 2 else friendly_name
 
-                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert"), runners_up_by_phase.get("insert")) + details.get((lang, impl, "insert"), "")
-                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit"), runners_up_by_phase.get("hit")) + details.get((lang, impl, "hit"), "")
-                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss"), runners_up_by_phase.get("miss")) + details.get((lang, impl, "miss"), "")
-                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate"), runners_up_by_phase.get("iterate")) + details.get((lang, impl, "iterate"), "")
-                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove"), runners_up_by_phase.get("remove")) + details.get((lang, impl, "remove"), "")
+                insert_str = format_html_metric(phases.get("insert"), best_by_phase.get("insert"), runners_up_by_phase.get("insert"))
+                hit_str = format_html_metric(phases.get("hit"), best_by_phase.get("hit"), runners_up_by_phase.get("hit"))
+                miss_str = format_html_metric(phases.get("miss"), best_by_phase.get("miss"), runners_up_by_phase.get("miss"))
+                iter_str = format_html_metric(phases.get("iterate"), best_by_phase.get("iterate"), runners_up_by_phase.get("iterate"))
+                remove_str = format_html_metric(phases.get("remove"), best_by_phase.get("remove"), runners_up_by_phase.get("remove"))
 
                 table_rows.append(
                     f"              <tr>"
-                    f"<td>{html.escape(lang)}</td>"
+                    f"<td>{html.escape(format_language(lang))}</td>"
                     f"<td>{html.escape(friendly_name)}</td>"
                     f"<td>{html.escape(structure)}</td>"
                     f'<td class="num">{insert_str}</td>'
@@ -894,9 +891,6 @@ def generate_html_report(records, metadata, downloads=()):
 
     lines.extend([
         "    </section>",
-        "<h2>Latency by Dataset Size</h2>",
-        "<p>The x-axis shows element counts with equal spacing between measured sizes.</p>",
-        scaling_charts(records, as_html=True),
         "    <footer>",
         "      <p>Ordered Benchmarks Suite</p>",
         "    </footer>",
