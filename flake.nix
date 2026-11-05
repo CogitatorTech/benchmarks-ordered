@@ -8,7 +8,7 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     ordered = {
-      url = "github:CogitatorTech/ordered/864d82da5cc060e668cb4fb9c0de5450fcf47985";
+      url = "github:CogitatorTech/ordered/5f4642563b9d0624ec38500e43a110ce0bdde173";
       flake = false;
     };
     klib = {
